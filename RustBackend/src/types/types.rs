@@ -23,7 +23,6 @@ pub enum Command {
     Filter {
         pattern: String,
     },
-    GetProgress,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -50,6 +49,9 @@ pub enum Response {
         message: String,
     },
     Error {
+        message: String,
+    },
+    Info {
         message: String,
     },
 }

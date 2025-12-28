@@ -24,7 +24,10 @@ impl CommandsProcessor {
         let guard = match file_state.lock() {
             Ok(g) => g,
             Err(_poisoned) => {
-                eprintln!("Something went wrong");
+                let response = Response::Error {
+                    message: "FileState mutex is poisened.".to_string(),
+                };
+                eprintln!("{}", serde_json::to_string(&response).unwrap());
                 std::process::exit(1);
             }
         };
@@ -32,7 +35,10 @@ impl CommandsProcessor {
         let fs = match guard.as_ref() {
             Some(f) => f,
             None => {
-                eprintln!("use OpenFile command before anything else.");
+                let response = Response::Error {
+                    message: "use OpenFile command before anything else.".to_string(),
+                };
+                eprintln!("{}", serde_json::to_string(&response).unwrap());
                 std::process::exit(1);
             }
         };
@@ -62,11 +68,6 @@ impl CommandsProcessor {
                     },
                 }
             }
-            Command::GetProgress => Response::Progress {
-                percent: 0.0,
-                message: String::from("Ready"),
-            },
-
             _ => Response::Error {
                 message: String::from("Command not implemented yet"),
             },
@@ -273,12 +274,16 @@ impl CommandsProcessor {
         if total_failures > 0 && show_errors {
             let preview: Vec<String> = failed_lines.iter().take(5).map(|n| n.to_string()).collect();
             let suffix = if total_failures > 5 { "..." } else { "" };
-            eprintln!(
-                "Failed to parse {} line(s): [{}]{}",
-                total_failures,
-                preview.join(", "),
-                suffix
-            );
+
+            let response = Response::Info {
+                message: format!(
+                    "Failed to parse {} line(s): [{}]{}",
+                    total_failures,
+                    preview.join(", "),
+                    suffix
+                ),
+            };
+            eprintln!("{}", serde_json::to_string(&response).unwrap());
         }
 
         results
@@ -312,7 +317,7 @@ impl CommandsProcessor {
         let last_reported_percent = Arc::new(AtomicU8::new(0));
 
         // Report 0% at start
-        eprintln!("{{\"SearchProgress\":{{\"percent\":0}}}}");
+        println!("{{\"SearchProgress\":{{\"percent\":0}}}}");
 
         // Parallel search across chunks
         let matches: Vec<SearchMatch> = (0..line_count)
@@ -330,10 +335,14 @@ impl CommandsProcessor {
                 )
                 .unwrap_or_else(|e| {
                     // Log error but continue searching other chunks
-                    eprintln!(
-                        "Failed to search chunk starting at line {}: {}",
-                        chunk_start, e
-                    );
+                    let response = Response::Info {
+                        message: format!(
+                            "Failed to search chunk starting at line {}: {}",
+                            chunk_start, e
+                        ),
+                    };
+                    eprintln!("{}", serde_json::to_string(&response).unwrap());
+
                     Vec::new() // Return empty vec for failed chunk
                 });
 
@@ -347,7 +356,7 @@ impl CommandsProcessor {
             .collect();
 
         // Report 100% at the end
-        eprintln!("{{\"SearchProgress\":{{\"percent\":100}}}}");
+        println!("{{\"SearchProgress\":{{\"percent\":100}}}}");
 
         let nbr_matches = matches.len();
         if nbr_matches >= MAX_RESULTS {
@@ -374,7 +383,7 @@ impl CommandsProcessor {
                 .compare_exchange(last, milestone, Ordering::SeqCst, Ordering::Relaxed)
                 .is_ok()
             {
-                eprintln!("{{\"SearchProgress\":{{\"percent\":{}}}}}", milestone);
+                println!("{{\"SearchProgress\":{{\"percent\":{}}}}}", milestone);
             }
         }
     }

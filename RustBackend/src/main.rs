@@ -29,10 +29,10 @@ fn main() -> io::Result<()> {
         let command: Command = match serde_json::from_str(&input_str) {
             Ok(cmd) => cmd,
             Err(e) => {
-                let response = Response::Error {
+                let response = Response::Info {
                     message: format!("Invalid JSON command: {}", e),
                 };
-                println!("{}", serde_json::to_string(&response).unwrap());
+                eprintln!("{}", serde_json::to_string(&response).unwrap());
                 continue;
             }
         };
@@ -54,7 +54,13 @@ fn main() -> io::Result<()> {
 
                 file_state = Arc::new(Mutex::new(Some(FileState {
                     processor: FileProcessor::new(path).unwrap_or_else(|err| {
-                        eprintln!("Something went wrong: {}", err);
+                        let response = Response::Error {
+                            message: format!(
+                                "Something went wrong when indexing the file: {}",
+                                err
+                            ),
+                        };
+                        eprintln!("{}", serde_json::to_string(&response).unwrap());
                         std::process::exit(1);
                     }),
                     regex_pattern,
@@ -76,7 +82,10 @@ fn main() -> io::Result<()> {
                             && let Ok(changed) = fp.processor.refresh_if_needed()
                             && changed
                         {
-                            eprintln!("File updated: re-indexed");
+                            let info_message = Response::Info {
+                                message: "File updated: re-indexed".to_string(),
+                            };
+                            println!("{}", serde_json::to_string(&info_message).unwrap());
                         }
                     }
                 }));
@@ -85,7 +94,11 @@ fn main() -> io::Result<()> {
                 let guard = match cloned_file_state.lock() {
                     Ok(g) => g,
                     Err(_poisoned) => {
-                        eprintln!("Something went wrong");
+                        let response = Response::Error {
+                            message: "Something went wrong with the watcher thread."
+                                .to_string(),
+                        };
+                        eprintln!("{}", serde_json::to_string(&response).unwrap());
                         std::process::exit(1);
                     }
                 };
@@ -93,8 +106,7 @@ fn main() -> io::Result<()> {
                 if let Some(fs) = guard.as_ref() {
                     let line_count = fs.processor.index.len() as u64;
                     let data = Response::FileOpened { line_count };
-                    let json = serde_json::to_string(&data).unwrap();
-                    println!("{}", json);
+                    println!("{}", serde_json::to_string(&data).unwrap());
                 }
             }
             _ => {
