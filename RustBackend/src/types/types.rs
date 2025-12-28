@@ -36,10 +36,11 @@ pub enum Response {
         start_line: u64,
         end_line: u64,
     },
-    // SearchResults {
-    //     matches: Vec<LogMatch>,
-    //     progress: f32,
-    // },
+    SearchResults {
+        matches: Vec<SearchMatch>,
+        total_matches: u32,
+        search_complete: bool,
+    },
     // FilterResults {
     //     matches: Vec<LogMatch>,
     //     progress: f32,
@@ -53,3 +54,10 @@ pub enum Response {
     },
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchMatch {
+    pub line_number: u32,
+    pub column: u8,
+    pub start_index: u16,
+    pub end_index: u16,
+}
