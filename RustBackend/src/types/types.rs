@@ -2,10 +2,27 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Command {
-    OpenFile { path: String },
-    GetChunk { start_line: u64, end_line: u64 },
-    Search { pattern: String },
-    Filter { pattern: String },
+    OpenFile {
+        path: String,
+
+        //defaults to None
+        #[serde(default)]
+        pattern: Option<String>,
+
+        //defaults to None - if not provided, no validation is performed
+        #[serde(default)]
+        nbr_columns: Option<u8>,
+    },
+    GetChunk {
+        start_line: u64,
+        end_line: u64,
+    },
+    Search {
+        pattern: String,
+    },
+    Filter {
+        pattern: String,
+    },
     GetProgress,
 }
 
@@ -15,7 +32,7 @@ pub enum Response {
         line_count: u64,
     },
     Chunk {
-        data: String,
+        data: Vec<Vec<String>>,
         start_line: u64,
         end_line: u64,
     },
@@ -35,3 +52,4 @@ pub enum Response {
         message: String,
     },
 }
+
