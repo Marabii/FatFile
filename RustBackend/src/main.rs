@@ -9,13 +9,12 @@ use std::{
 };
 mod services;
 mod types;
-use regex::Regex;
-use services::file_processor::FileProcessor;
-
 use crate::{
     services::{FileState, commands_processor::CommandsProcessor},
     types::{Command, Response},
 };
+use regex::Regex;
+use services::file_processor::FileProcessor;
 
 fn main() -> io::Result<()> {
     let stdin = io::stdin();
