@@ -1,10 +1,7 @@
 use rayon::prelude::*;
-use std::{
-    fs::File,
-    sync::{
-        Arc,
-        atomic::{AtomicU8, AtomicUsize, Ordering},
-    },
+use std::sync::{
+    Arc,
+    atomic::{AtomicU8, AtomicUsize, Ordering},
 };
 
 use crate::services::commands::utils;
@@ -27,15 +24,6 @@ pub fn search(
     let total_chunks = line_count.div_ceil(CHUNK_SIZE);
     let mut search_complete = true;
 
-    let file = match File::open(&processor.file_path) {
-        Ok(f) => f,
-        Err(e) => {
-            return Response::Error {
-                message: format!("Failed to open file: {}", e),
-            };
-        }
-    };
-
     // Progress tracking
     let completed_chunks = Arc::new(AtomicUsize::new(0));
     let last_reported_percent = Arc::new(AtomicU8::new(0));
@@ -55,7 +43,6 @@ pub fn search(
                 nbr_columns,
                 chunk_start,
                 CHUNK_SIZE.min(line_count - chunk_start),
-                &file,
             )
             .unwrap_or_else(|e| {
                 // Log error but continue searching other chunks
@@ -101,15 +88,10 @@ fn search_chunk(
     nbr_columns: Option<u8>,
     start_line: usize,
     count: usize,
-    file: &File,
 ) -> Result<Vec<SearchMatch>, String> {
     // Read lines - return error if fails
-    let read_result = utils::read_lines_range(
-        processor,
-        Some(file),
-        start_line as u64,
-        (start_line + count) as u64,
-    );
+    let read_result =
+        utils::read_lines_range(processor, start_line as u64, (start_line + count) as u64);
 
     if let Some(error) = read_result.error {
         return Err(format!("Failed to read lines: {:?}", error));

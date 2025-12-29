@@ -13,12 +13,7 @@ pub struct ReadLines {
     pub error: Option<types::Response>,
 }
 
-pub fn read_lines_range(
-    processor: &FileProcessor,
-    file: Option<&File>,
-    start_line: u64,
-    end_line: u64,
-) -> ReadLines {
+pub fn read_lines_range(processor: &FileProcessor, start_line: u64, end_line: u64) -> ReadLines {
     let line_count = processor.index.len() as u64;
 
     if line_count == 0 {
@@ -72,31 +67,21 @@ pub fn read_lines_range(
     let end_pos = processor.index[actual_end_line as usize] + 1;
     let bytes_to_read = (end_pos - start_pos) as usize;
 
-    // Determine which file handle to use
-    // We declare `local_file` here to extend its lifetime to the end of the function if initialized
-    let local_file;
-
-    let file_ref = match file {
-        Some(f) => f,
-        None => match File::open(&processor.file_path) {
-            Ok(f) => {
-                local_file = f;
-                &local_file
-            }
-            Err(e) => {
-                let error = Response::Error {
-                    message: format!("Failed to open file: {}", e),
-                };
-                return ReadLines {
-                    lines: None,
-                    error: Some(error),
-                };
-            }
-        },
+    let file = match File::open(&processor.file_path) {
+        Ok(f) => f,
+        Err(e) => {
+            let error = Response::Error {
+                message: format!("Failed to open file: {}", e),
+            };
+            return ReadLines {
+                lines: None,
+                error: Some(error),
+            };
+        }
     };
 
     // Use BufReader on the reference (works for both &File and &local_file)
-    let mut reader = BufReader::new(file_ref);
+    let mut reader = BufReader::new(file);
 
     if let Err(e) = reader.seek(SeekFrom::Start(start_pos)) {
         let error = Response::Error {
