@@ -10,7 +10,7 @@ pub fn get_chunk(
     regex_pattern: &Option<regex::Regex>,
     nbr_columns: Option<u8>,
 ) -> Response {
-    let result = utils::read_lines_range(processor, None, start_line, end_line);
+    let result = utils::read_lines_range(processor, start_line, end_line);
     if result.error.is_some() {
         return result.error.unwrap();
     }

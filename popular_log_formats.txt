@@ -1,0 +1,132 @@
+Here are some of the most popular log formats used in the industry, along with their matching regex patterns and example usage.
+
+### 1. Common Log Format (CLF)
+
+This is the standard format for web server logs (Apache, Nginx, etc.). It lacks the "Referer" and "User-Agent" fields at the end.
+
+* **Log Line Example:**
+```text
+127.0.0.1 - frank [10/Oct/2000:13:55:36 -0700] "GET /apache_pb.gif HTTP/1.0" 200 2326
+
+```
+
+
+* **Regex Pattern:**
+```regex
+^(\S+) \S+ (\S+) \[([\w:/]+\s[+\-]\d{4})\] "(\S+) (\S+)\s*(\S+)?\s*" (\d{3}) (\S+)
+
+```
+
+
+
+### 2. Syslog (RFC 3164 - BSD Style)
+
+This is the classic log format found on most Linux/Unix systems (`/var/log/syslog` or `/var/log/messages`). It is arguably the most widely used format for system logs and network devices (routers, switches).
+
+* **Log Line Example:**
+```text
+<34>Oct 11 22:14:15 mymachine su: 'su root' failed for lonvick on /dev/pts/8
+
+```
+
+
+* **Regex Pattern:**
+```regex
+^<(\d{1,3})>([A-Z][a-z]{2}\s{1,2}\d{1,2}\s\d{2}:\d{2}:\d{2})\s(\S+)\s([^:]+):\s(.*)$
+
+```
+
+
+* **Breakdown:**
+* `<(\d{1,3})>`: Priority value.
+* `([A-Z][a-z]{2} ...)`: Timestamp (e.g., Oct 11 22:14:15).
+* `(\S+)`: Hostname.
+* `([^:]+)`: Process/Tag (e.g., `su`).
+* `(.*)`: The actual message content.
+
+
+
+
+
+### 3. Syslog (RFC 5424 - IETF Standard)
+
+This is the modern upgrade to the classic Syslog. It solves the timestamp ambiguity (adding the year and milliseconds) and adds structured data support. It is often used by modern logging daemons like `rsyslog` or `syslog-ng`.
+
+* **Log Line Example:**
+```text
+<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"] An application event log entry
+
+```
+
+
+* **Regex Pattern:**
+```regex
+^<(\d{1,3})>1\s(\S+)\s(\S+)\s(\S+)\s(\S+)\s(\S+)\s(\[(?:.+)\]|-) (.*)$
+
+```
+
+
+
+### 4. W3C Extended Log File Format (IIS)
+
+This is the default format for Microsoft IIS web servers. It is distinct because the fields are space-separated, but the order is configurable by the administrator. The default usually includes the method, URI, and status.
+
+* **Log Line Example:**
+```text
+2023-05-02 17:42:15 192.168.1.1 GET /images/logo.png - 80 - 10.0.0.1 Mozilla/5.0 200 0 0
+
+```
+
+
+* **Regex Pattern:**
+```regex
+^(\d{4}-\d{2}-\d{2})\s(\d{2}:\d{2}:\d{2})\s(\S+)\s(\S+)\s(\S+)\s(\S+)\s(\d+)\s(\S+)\s(\S+)\s(.*?)\s(\d{3})\s(\d+)\s(\d+)
+
+```
+
+
+* *Note: Because IIS logs are customizable, this regex matches the specific example above. You often have to adjust based on the `#Fields` header in the file.*
+
+
+
+### 5 Common Event Format (CEF)
+
+Developed by ArcSight, this is the standard for security devices (Firewalls, IDS/IPS). It uses a prefix with pipes `|` followed by key-value pairs.
+
+* **Log Line Example:**
+```text
+CEF:0|Security|ThreatManager|1.0|100|Worm Detected|10|src=10.0.0.1 dst=2.1.2.2 spt=1232
+
+```
+
+
+* **Regex Pattern:**
+```regex
+^CEF:(\d+)\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|(\d+)\|(.*)$
+
+```
+
+
+* **Breakdown:**
+* `CEF:(\d+)`: Version.
+* `\|([^|]+)`: Device Vendor, Product, Version, Event ID, Name, Severity (separated by pipes).
+* `(.*)`: The extension part containing key-value pairs (src=..., dst=...).
+
+
+### 6 NCSA Combined Log Format
+It is essentially an extension of the Common Log Format (CLF). While the "Common" format only includes the basic request details,
+the "Combined" format adds two extra fields at the end: the Referer (where the user came from)
+and the User-Agent (the browser/device information).
+
+* **Log Line Example:**
+```text
+10.190.174.142 - - [03/Dec/2011:13:28:11 -0800] "GET /images/filmmediablock/360/GOEMON-NUKI-000159.jpg HTTP/1.1" 200 161658
+
+```
+
+
+* **Regex Pattern:**
+```regex
+(\\d{1,3}(?:\\.\\d{1,3}){3}) - - \\[(.*?)\\] \"(.*?)\" (\\d{3}) (\\d+|-)
+
+```
