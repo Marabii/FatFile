@@ -10,11 +10,10 @@ use std::{
 mod services;
 mod types;
 use crate::{
-    services::{FileState, commands_processor::CommandsProcessor},
+    services::{FileProcessor, FileState, commands_processor::CommandsProcessor},
     types::{Command, Response},
 };
 use regex::Regex;
-use services::file_processor::FileProcessor;
 
 fn main() -> io::Result<()> {
     let stdin = io::stdin();

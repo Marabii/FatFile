@@ -1,8 +1,7 @@
-use crate::services::file_processor::FileProcessor;
-
-mod commands;
+pub mod commands;
 pub mod commands_processor;
-pub mod file_processor;
+mod file_processor;
+pub use file_processor::FileProcessor;
 
 pub struct FileState {
     pub processor: FileProcessor,
