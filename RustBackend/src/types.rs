@@ -2,9 +2,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Command {
+    GetFileMetadata {
+        path: String,
+    },
     OpenFile {
         path: String,
-
         //defaults to None
         #[serde(default)]
         pattern: Option<String>,
@@ -27,6 +29,10 @@ pub enum Command {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Response {
+    MetaData {
+        encoding: String,
+        is_supported: bool,
+    },
     FileOpened {
         line_count: u64,
     },

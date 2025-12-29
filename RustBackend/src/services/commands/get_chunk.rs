@@ -10,12 +10,11 @@ pub fn get_chunk(
     regex_pattern: &Option<regex::Regex>,
     nbr_columns: Option<u8>,
 ) -> Response {
-    let result = utils::read_lines_range(processor, start_line, end_line);
-    if result.error.is_some() {
-        return result.error.unwrap();
-    }
+    let lines = match processor.read_lines_range(start_line, end_line) {
+        Ok(lines) => lines,
+        Err(err) => return Response::Error { message: err },
+    };
 
-    let lines = result.lines.unwrap();
     // Parse the lines using the regex pattern
     let data = utils::parse_data(regex_pattern, nbr_columns, &lines, start_line, true);
 
