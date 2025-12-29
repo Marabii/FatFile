@@ -94,8 +94,7 @@ fn main() -> io::Result<()> {
                     Ok(g) => g,
                     Err(_poisoned) => {
                         let response = Response::Error {
-                            message: "Something went wrong with the watcher thread."
-                                .to_string(),
+                            message: "Something went wrong with the watcher thread.".to_string(),
                         };
                         eprintln!("{}", serde_json::to_string(&response).unwrap());
                         std::process::exit(1);

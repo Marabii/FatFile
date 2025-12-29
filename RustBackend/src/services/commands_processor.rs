@@ -12,6 +12,12 @@ impl CommandsProcessor {
         command: Command,
         file_state: Arc<Mutex<Option<FileState>>>,
     ) -> Response {
+        // Handle commands that don't require an opened file
+        if let Command::GetFileMetadata { path } = command {
+            return commands::get_file_metadata(&path);
+        }
+
+        // For all other commands, ensure a file is opened first
         let guard = match file_state.lock() {
             Ok(g) => g,
             Err(_poisoned) => {

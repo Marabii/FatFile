@@ -90,14 +90,8 @@ fn search_chunk(
     count: usize,
 ) -> Result<Vec<SearchMatch>, String> {
     // Read lines - return error if fails
-    let read_result =
-        utils::read_lines_range(processor, start_line as u64, (start_line + count) as u64);
+    let lines = processor.read_lines_range(start_line as u64, (start_line + count) as u64)?;
 
-    if let Some(error) = read_result.error {
-        return Err(format!("Failed to read lines: {:?}", error));
-    }
-
-    let lines = read_result.lines.ok_or("No lines returned")?;
     let mut matches: Vec<SearchMatch> = Vec::new();
 
     let parsed_lines = utils::parse_data(
