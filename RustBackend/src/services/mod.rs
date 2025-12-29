@@ -1,5 +1,6 @@
 use crate::services::file_processor::FileProcessor;
 
+mod commands;
 pub mod commands_processor;
 pub mod file_processor;
 
