@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { LogViewer } from './components/LogViewer';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { LogViewer, type LogViewerRef } from './components/LogViewer';
 import { SearchBar } from './components/SearchBar';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { ParsingPreviewPanel } from './components/ParsingPreviewPanel';
@@ -56,6 +56,10 @@ export const App: React.FC = () => {
     isParsed: false,
     parsingColumns: null,
   });
+
+  const [showResultsPanel, setShowResultsPanel] = useState(false);
+  const [highlightedLine, setHighlightedLine] = useState<number | undefined>();
+  const mainViewerRef = useRef<LogViewerRef>(null);
 
   const handleResponse = useCallback((response: Response) => {
     console.log('[WEBVIEW] Handling response:', response);
@@ -313,6 +317,114 @@ export const App: React.FC = () => {
     }
   }, [state.encoding, state.encodingSupported]);
 
+  // Show results panel when search completes with results
+  useEffect(() => {
+    if (state.searchResults.length > 0 && !state.isSearching) {
+      setShowResultsPanel(true);
+    }
+  }, [state.searchResults.length, state.isSearching]);
+
+  // Build filtered chunks containing only search result lines, re-indexed from 0
+  const [searchResultData, setSearchResultData] = useState<{
+    chunks: Map<number, string[][]>;
+    lineCount: number;
+    lineMapping: Map<number, number>; // virtual index -> actual line number
+  }>({ chunks: new Map(), lineCount: 0, lineMapping: new Map() });
+
+  useEffect(() => {
+    if (state.searchResults.length === 0) {
+      setSearchResultData({ chunks: new Map(), lineCount: 0, lineMapping: new Map() });
+      return;
+    }
+
+    const CHUNK_SIZE = 100;
+    const filteredChunks = new Map<number, string[][]>();
+    const lineMapping = new Map<number, number>();
+
+    // Sort results by line number
+    const sortedResults = [...state.searchResults].sort((a, b) => a.line_number - b.line_number);
+
+    // First, identify which chunks we need and request missing ones
+    const neededChunks = new Set<number>();
+    for (const result of sortedResults) {
+      const chunkStart = Math.floor(result.line_number / CHUNK_SIZE) * CHUNK_SIZE;
+      neededChunks.add(chunkStart);
+    }
+
+    // Request any missing chunks
+    const missingChunks: number[] = [];
+    for (const chunkStart of neededChunks) {
+      if (!state.chunks.has(chunkStart)) {
+        missingChunks.push(chunkStart);
+      }
+    }
+
+    // If there are missing chunks, request them
+    if (missingChunks.length > 0) {
+      console.log('[App] Requesting missing chunks for search results:', missingChunks);
+      for (const chunkStart of missingChunks) {
+        const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, state.lineCount);
+        handleGetChunk(chunkStart, chunkEnd);
+      }
+      // Don't build search result data yet - wait for chunks to load
+      return;
+    }
+
+    let virtualIndex = 0;
+
+    // Build chunks with re-indexed lines
+    for (const result of sortedResults) {
+      const originalLineNumber = result.line_number;
+      const originalChunkStart = Math.floor(originalLineNumber / CHUNK_SIZE) * CHUNK_SIZE;
+      const originalChunk = state.chunks.get(originalChunkStart);
+
+      if (originalChunk) {
+        const lineIndexInChunk = originalLineNumber - originalChunkStart;
+        const lineData = originalChunk[lineIndexInChunk];
+
+        if (lineData) {
+          // Map virtual index to actual line number
+          lineMapping.set(virtualIndex, originalLineNumber);
+
+          // Add to virtual chunk
+          const virtualChunkStart = Math.floor(virtualIndex / CHUNK_SIZE) * CHUNK_SIZE;
+          if (!filteredChunks.has(virtualChunkStart)) {
+            filteredChunks.set(virtualChunkStart, []);
+          }
+          filteredChunks.get(virtualChunkStart)!.push(lineData);
+
+          virtualIndex++;
+        }
+      }
+    }
+
+    console.log('[App] Built search result data:', { lineCount: sortedResults.length, chunks: filteredChunks.size });
+    setSearchResultData({
+      chunks: filteredChunks,
+      lineCount: sortedResults.length,
+      lineMapping
+    });
+  }, [state.searchResults, state.chunks, handleGetChunk, state.lineCount]);
+
+  // Handler to navigate from results panel to main view
+  const handleResultLineClick = useCallback((virtualLineNumber: number) => {
+    // Map virtual line number to actual line number
+    const actualLineNumber = searchResultData.lineMapping.get(virtualLineNumber);
+    if (actualLineNumber !== undefined) {
+      setHighlightedLine(actualLineNumber);
+      // Scroll main viewer to this line
+      if (mainViewerRef.current) {
+        mainViewerRef.current.goToLine(actualLineNumber + 1);
+      }
+    }
+  }, [searchResultData.lineMapping]);
+
+  // Handler to close results panel
+  const handleCloseResults = useCallback(() => {
+    setShowResultsPanel(false);
+    setHighlightedLine(undefined);
+  }, []);
+
   if (state.isLoading && state.lineCount === 0) {
     return (
       <div className="flex items-center justify-center w-full h-full">
@@ -351,14 +463,40 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex flex-col w-full h-full">
-      <LogViewer
-        lineCount={state.lineCount}
-        chunks={state.chunks}
-        searchResults={state.searchResults}
-        onGetChunk={handleGetChunk}
-        nbrColumns={state.isParsed && state.parsingColumns ? state.parsingColumns : undefined}
-      />
+      {/* Main content area - viewers */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Main log viewer */}
+        <div className="flex flex-col overflow-hidden" style={{ height: showResultsPanel ? '50%' : '100%' }}>
+          <LogViewer
+            ref={mainViewerRef}
+            lineCount={state.lineCount}
+            chunks={state.chunks}
+            searchResults={state.searchResults}
+            onGetChunk={handleGetChunk}
+            nbrColumns={state.isParsed && state.parsingColumns ? state.parsingColumns : undefined}
+            highlightedLine={highlightedLine}
+          />
+        </div>
 
+        {/* Search results panel */}
+        {showResultsPanel && searchResultData.lineCount > 0 && (
+          <div className="flex flex-col overflow-hidden border-t" style={{ height: '50%', borderColor: 'var(--vscode-panel-border)' }}>
+            <LogViewer
+              lineCount={searchResultData.lineCount}
+              chunks={searchResultData.chunks}
+              searchResults={state.searchResults}
+              onGetChunk={() => {}} // No chunk loading needed for results
+              nbrColumns={state.isParsed && state.parsingColumns ? state.parsingColumns : undefined}
+              onLineClick={handleResultLineClick}
+              showHeader={true}
+              onClose={handleCloseResults}
+              title={`Search Results (${state.searchResults.length} matches)`}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Search bar at bottom */}
       <SearchBar
         onSearch={handleSearch}
         isSearching={state.isSearching}
