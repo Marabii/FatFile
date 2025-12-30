@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { FixedSizeList as List } from 'react-window';
+import Draggable from 'react-draggable';
 import type { SearchMatch } from '../../types';
 
 interface LogViewerProps {
@@ -34,6 +35,8 @@ export const LogViewer: React.FC<LogViewerProps> = ({
   const listRef = useRef<List>(null);
   const [containerHeight, setContainerHeight] = useState(600);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(800);
+  const [columnWidths, setColumnWidths] = useState<number[]>([]);
 
   // For very large files, use windowing with offset
   const [lineOffset, setLineOffset] = useState(0);
@@ -66,18 +69,39 @@ export const LogViewer: React.FC<LogViewerProps> = ({
     }
   }, [searchResults]);
 
-  // Update container height on resize
+  // Update container height and width on resize
   useEffect(() => {
-    const updateHeight = () => {
+    const updateDimensions = () => {
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
         setContainerHeight(rect.height);
+        setContainerWidth(rect.width);
       }
     };
 
-    updateHeight();
-    window.addEventListener('resize', updateHeight);
-    return () => window.removeEventListener('resize', updateHeight);
+    updateDimensions();
+    window.addEventListener('resize', updateDimensions);
+    return () => window.removeEventListener('resize', updateDimensions);
+  }, []);
+
+  // Initialize column widths when number of columns changes
+  useEffect(() => {
+    if (nbrColumns && nbrColumns > 0) {
+      const LINE_NUMBER_WIDTH = 80;
+      const PADDING = 16; // 8px on each side
+      const availableWidth = containerWidth - LINE_NUMBER_WIDTH - PADDING;
+      const columnWidth = Math.max(150, availableWidth / nbrColumns);
+      setColumnWidths(Array(nbrColumns).fill(columnWidth));
+    }
+  }, [nbrColumns, containerWidth]);
+
+  // Handle column resize
+  const handleColumnResize = useCallback((columnIndex: number, deltaX: number) => {
+    setColumnWidths(prev => {
+      const newWidths = [...prev];
+      newWidths[columnIndex] = Math.max(50, newWidths[columnIndex] + deltaX);
+      return newWidths;
+    });
   }, []);
 
   // Request chunks as needed (accounting for offset)
@@ -237,7 +261,6 @@ export const LogViewer: React.FC<LogViewerProps> = ({
           paddingRight: '8px',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
           backgroundColor: hasMatch ? 'var(--vscode-editor-findMatchHighlightBackground)' : 'transparent',
           fontFamily: 'var(--vscode-editor-font-family)',
           fontSize: 'var(--vscode-editor-font-size)',
@@ -245,34 +268,51 @@ export const LogViewer: React.FC<LogViewerProps> = ({
           boxSizing: 'border-box'
         }}
       >
-        <span
+        {/* Line number - fixed width */}
+        <div
           className="select-none flex-shrink-0"
           style={{
             opacity: 0.5,
             width: '80px',
             textAlign: 'right',
-            fontSize: '11px'
+            fontSize: '11px',
+            paddingRight: '12px'
           }}
         >
           {(actualLineIndex + 1).toLocaleString()}
-        </span>
+        </div>
 
-        <div className="flex-1 flex gap-3" style={{ whiteSpace: 'nowrap' }}>
+        {/* Data columns */}
+        <div className="flex-1 flex" style={{ overflow: 'visible' }}>
           {lineData.map((column, colIndex) => (
-            <span
+            <div
               key={colIndex}
-              className="flex-shrink-0"
               style={{
-                color: nbrColumns && nbrColumns > 1 ? COLUMN_COLORS[colIndex % COLUMN_COLORS.length] : 'inherit'
+                width: columnWidths[colIndex] || 150,
+                flexShrink: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                paddingRight: '8px',
+                color: nbrColumns && nbrColumns > 1 ? COLUMN_COLORS[colIndex % COLUMN_COLORS.length] : 'inherit',
+                cursor: 'text'
               }}
+              onDoubleClick={(e) => {
+                const selection = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(e.currentTarget);
+                selection?.removeAllRanges();
+                selection?.addRange(range);
+              }}
+              title={column}
             >
               {highlightMatches(column, actualLineIndex, colIndex)}
-            </span>
+            </div>
           ))}
         </div>
       </div>
     );
-  }, [getLineData, highlightMatches, nbrColumns, needsWindowing, lineOffset]);
+  }, [getLineData, highlightMatches, nbrColumns, needsWindowing, lineOffset, columnWidths]);
 
   // Scroll to first search result
   useEffect(() => {
@@ -343,10 +383,109 @@ export const LogViewer: React.FC<LogViewerProps> = ({
           </form>
         </div>
       )}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {/* Column Headers */}
+        {nbrColumns && nbrColumns > 0 && columnWidths.length > 0 && (
+          <div
+            style={{
+              height: '28px',
+              display: 'flex',
+              alignItems: 'center',
+              paddingLeft: '8px',
+              paddingRight: '8px',
+              borderBottom: '1px solid var(--vscode-panel-border)',
+              backgroundColor: 'var(--vscode-editor-background)',
+              fontFamily: 'var(--vscode-editor-font-family)',
+              fontSize: '11px',
+              fontWeight: 600,
+              position: 'sticky',
+              top: 0,
+              zIndex: 10
+            }}
+          >
+            {/* Line number header */}
+            <div
+              className="select-none flex-shrink-0"
+              style={{
+                width: '80px',
+                textAlign: 'right',
+                paddingRight: '12px',
+                opacity: 0.7
+              }}
+            >
+              Line
+            </div>
+
+            {/* Column headers with resize handles */}
+            <div className="flex-1 flex" style={{ position: 'relative' }}>
+              {Array.from({ length: nbrColumns }).map((_, colIndex) => (
+                <div
+                  key={colIndex}
+                  style={{
+                    width: columnWidths[colIndex] || 150,
+                    flexShrink: 0,
+                    paddingRight: '8px',
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: COLUMN_COLORS[colIndex % COLUMN_COLORS.length]
+                  }}
+                >
+                  <span>Column {colIndex + 1}</span>
+
+                  {/* Resize handle */}
+                  {colIndex < nbrColumns - 1 && (
+                    <Draggable
+                      axis="x"
+                      position={{ x: 0, y: 0 }}
+                      onDrag={(e, data) => {
+                        handleColumnResize(colIndex, data.deltaX);
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: 'absolute',
+                          right: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: '8px',
+                          cursor: 'col-resize',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          zIndex: 20
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: '2px',
+                            height: '100%',
+                            backgroundColor: 'var(--vscode-panel-border)',
+                            transition: 'background-color 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = 'var(--vscode-focusBorder)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'var(--vscode-panel-border)';
+                          }}
+                        />
+                      </div>
+                    </Draggable>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Data rows */}
         <List
           ref={listRef}
-          height={needsWindowing ? containerHeight - 40 : containerHeight}
+          height={
+            (needsWindowing ? containerHeight - 40 : containerHeight) -
+            (nbrColumns && nbrColumns > 0 ? 28 : 0)
+          }
           itemCount={virtualItemCount}
           itemSize={LINE_HEIGHT}
           width="100%"
