@@ -1,9 +1,13 @@
 mod get_chunk;
 mod get_file_encoding;
+mod get_parsing_information;
 mod open_file;
+mod parse_file;
 mod search;
 mod utils;
 pub use get_chunk::get_chunk;
 pub use get_file_encoding::get_file_encoding;
+pub use get_parsing_information::get_parsing_information;
 pub use open_file::open_file;
+pub use parse_file::parse_file;
 pub use search::search;

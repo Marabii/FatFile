@@ -1,5 +1,17 @@
 use serde::{Deserialize, Serialize};
 
+#[allow(clippy::enum_variant_names)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum LogFormat {
+    CommonLogFormat,
+    SyslogRFC3164,
+    SyslogRFC5424,
+    W3CExtended,
+    CommonEventFormat,
+    NCSACombined,
+    Other,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Command {
     GetFileEncoding {
@@ -7,7 +19,11 @@ pub enum Command {
     },
     OpenFile {
         path: String,
-        //defaults to None
+    },
+    GetParsingInformation,
+    ParseFile {
+        log_format: LogFormat,
+
         #[serde(default)]
         pattern: Option<String>,
 
@@ -15,7 +31,6 @@ pub enum Command {
         #[serde(default)]
         nbr_columns: Option<u8>,
     },
-    GetParsingInformation,
     GetChunk {
         start_line: u64,
         end_line: u64,
@@ -36,6 +51,9 @@ pub enum Response {
     },
     FileOpened {
         line_count: u64,
+    },
+    ParsingInformation {
+        log_format: LogFormat,
     },
     Chunk {
         data: Vec<Vec<String>>,
