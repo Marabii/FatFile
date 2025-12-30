@@ -4,6 +4,7 @@ use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::{fs::File, path::Path};
 
+use crate::Response;
 use crate::services::commands;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -21,31 +22,37 @@ pub struct FileProcessor {
 }
 
 impl FileProcessor {
-    pub fn new(file_path: String) -> Result<Self, String> {
+    pub fn new(file_path: &str) -> Result<Self, String> {
         let path = Path::new(&file_path);
         if !path.is_absolute() {
             return Err("Path must be absolute".to_string());
         }
 
-        // Get file metadata to check encoding support
-        let metadata = commands::get_file_metadata(&file_path);
+        // Get file encoding support
+        let encoding = commands::get_file_encoding(file_path);
 
-        let (encoding_label, is_supported) = match metadata {
-            crate::Response::MetaData { encoding, is_supported } => (encoding, is_supported),
-            crate::Response::Error { message } => {
-                return Err(format!("Failed to get file metadata: {}", message));
+        let (mut encoding_label, is_supported) = match encoding {
+            Response::Encoding {
+                encoding,
+                is_supported,
+            } => (encoding, is_supported),
+            Response::Error { message } => {
+                return Err(format!("Failed to get file encoding: {}", message));
             }
             _ => {
-                return Err(String::from("Unexpected response from get_file_metadata"));
+                return Err(String::from("Unexpected response from get_file_encoding"));
             }
         };
 
         // Check if encoding is supported
         if !is_supported {
-            return Err(format!(
-                "Unsupported file encoding: {}. Only ASCII-compatible and UTF-16 encodings are supported.",
-                encoding_label
-            ));
+            let response = Response::Info {
+                message:
+                    "encoding is not supported, file will be treated as if it has utf8 encoding"
+                        .to_string(),
+            };
+            println!("{}", serde_json::to_string(&response).unwrap());
+            encoding_label = String::from("utf-8");
         }
 
         // Resolve Encoding and determine Mode
@@ -69,7 +76,7 @@ impl FileProcessor {
             return Err(format!("Unsupported file encoding: {}", encoding_label));
         };
 
-        let mut file = File::open(&file_path).map_err(|e| format!("couldn't open file: {}", e))?;
+        let mut file = File::open(file_path).map_err(|e| format!("couldn't open file: {}", e))?;
         let mut index: Vec<u64> = Vec::new();
 
         // Pass the determined mode to the indexer
@@ -77,7 +84,7 @@ impl FileProcessor {
             .map_err(|e| format!("couldn't scan the file: {}", e))?;
 
         Ok(Self {
-            file_path: file_path.clone(),
+            file_path: String::from(file_path),
             index,
             last_file_size: fs::metadata(file_path)
                 .map_err(|e| format!("couldn't get metadata of file: {}", e))?
@@ -121,7 +128,8 @@ impl FileProcessor {
                     // 1. Handle edge case: Did previous chunk end with 0x0A awaiting a 0x00?
                     if let Some(prev) = last_byte_of_prev_chunk {
                         // If prev chunk ended on 0x0A (even offset) and this starts with 0x00
-                        if prev == 0x0A && chunk[0] == 0x00 && (total_offset - 1).is_multiple_of(2) {
+                        if prev == 0x0A && chunk[0] == 0x00 && (total_offset - 1).is_multiple_of(2)
+                        {
                             index.push(total_offset - 1);
                         }
                     }
@@ -163,9 +171,10 @@ impl FileProcessor {
                             } else {
                                 // Boundary case: 0x0A is the first byte. Check previous chunk's last byte.
                                 if let Some(prev) = last_byte_of_prev_chunk
-                                    && prev == 0x00 {
-                                        index.push(abs_pos);
-                                    }
+                                    && prev == 0x00
+                                {
+                                    index.push(abs_pos);
+                                }
                             }
                         }
                     }
@@ -215,7 +224,8 @@ impl FileProcessor {
         let mut start_pos = self.last_file_size;
 
         // Safety adjustment for UTF-16 boundary consistency if file was appended oddly
-        if matches!(self.mode, EncodingMode::Utf16LE | EncodingMode::Utf16BE) && !start_pos.is_multiple_of(2)
+        if matches!(self.mode, EncodingMode::Utf16LE | EncodingMode::Utf16BE)
+            && !start_pos.is_multiple_of(2)
         {
             start_pos = start_pos.saturating_sub(1);
         }
@@ -231,11 +241,7 @@ impl FileProcessor {
     }
 
     /// Read lines from start_line to end_line (inclusive) and decode them properly
-    pub fn read_lines_range(
-        &self,
-        start_line: u64,
-        end_line: u64,
-    ) -> Result<Vec<String>, String> {
+    pub fn read_lines_range(&self, start_line: u64, end_line: u64) -> Result<Vec<String>, String> {
         let line_count = self.index.len() as u64;
 
         if line_count == 0 {
@@ -271,8 +277,8 @@ impl FileProcessor {
         let bytes_to_read = (end_pos - start_pos) as usize;
 
         // Read the raw bytes
-        let mut file = File::open(&self.file_path)
-            .map_err(|e| format!("Failed to open file: {}", e))?;
+        let mut file =
+            File::open(&self.file_path).map_err(|e| format!("Failed to open file: {}", e))?;
 
         file.seek(SeekFrom::Start(start_pos))
             .map_err(|e| format!("Failed to seek to position {}: {}", start_pos, e))?;
@@ -309,7 +315,7 @@ impl FileProcessor {
                 }
             }
         };
-
+        let decoded_text = decoded_text.trim_start_matches('\u{FEFF}');
         // Split into lines
         let lines = decoded_text
             .lines()
