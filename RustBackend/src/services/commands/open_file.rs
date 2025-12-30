@@ -7,8 +7,6 @@ use std::{
     time::Duration,
 };
 
-use regex::Regex;
-
 use crate::{
     services::{FileProcessor, FileState},
     types::Response,
@@ -16,8 +14,6 @@ use crate::{
 
 pub fn open_file(
     path: &str,
-    pattern: Option<String>,
-    nbr_columns: Option<u8>,
     file_state: &mut Arc<Mutex<Option<FileState>>>,
     watcher_handle: &mut Option<JoinHandle<()>>,
     should_stop: &Arc<AtomicBool>,
@@ -28,7 +24,6 @@ pub fn open_file(
         should_stop.store(false, Ordering::Relaxed); //reset the stop signal for another use.
     }
 
-    let regex_pattern: Option<Regex> = pattern.and_then(|re_str| Regex::new(&re_str).ok());
     let processor = match FileProcessor::new(path) {
         Ok(p) => p,
         Err(err) => {
@@ -41,8 +36,8 @@ pub fn open_file(
 
     *file_state = Arc::new(Mutex::new(Some(FileState {
         processor,
-        regex_pattern,
-        nbr_columns,
+        regex_pattern: None,
+        nbr_columns: None,
     })));
 
     let cloned_file_state = Arc::clone(file_state);

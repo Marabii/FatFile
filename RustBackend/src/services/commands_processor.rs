@@ -1,5 +1,8 @@
 use std::{
-    sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     thread::JoinHandle,
 };
 
@@ -29,18 +32,22 @@ impl CommandsProcessor {
             Command::GetFileEncoding { path } => commands::get_file_encoding(&path),
 
             // Handle the OpenFile command:
-            Command::OpenFile {
-                path,
-                pattern,
-                nbr_columns,
-            } => commands::open_file(
+            Command::OpenFile { path } => commands::open_file(
                 &path,
-                pattern,
-                nbr_columns,
                 &mut self.file_state,
                 &mut self.watcher_handle,
                 &self.should_stop,
             ),
+
+            // Handle the ParseFile command (needs to modify file_state):
+            Command::ParseFile {
+                log_format,
+                pattern,
+                nbr_columns,
+            } => {
+                let file_state = Arc::clone(&self.file_state);
+                commands::parse_file(file_state, log_format, pattern, nbr_columns)
+            }
 
             // Handle all other commands that require an open file:
             other_command => {
@@ -67,6 +74,9 @@ impl CommandsProcessor {
                 };
 
                 match other_command {
+                    Command::GetParsingInformation => {
+                        commands::get_parsing_information(&fs.processor)
+                    }
                     Command::GetChunk {
                         start_line,
                         end_line,
