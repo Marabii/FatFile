@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import Draggable from 'react-draggable';
 import type { SearchMatch } from '../../types';
@@ -9,6 +9,11 @@ interface LogViewerProps {
   searchResults: SearchMatch[];
   onGetChunk: (startLine: number, endLine: number) => void;
   nbrColumns?: number;
+  onLineClick?: (lineNumber: number) => void;
+  highlightedLine?: number;
+  showHeader?: boolean;
+  onClose?: () => void;
+  title?: string;
 }
 
 const CHUNK_SIZE = 100;
@@ -25,13 +30,22 @@ const COLUMN_COLORS = [
   '#B5CEA8', // Green
 ];
 
-export const LogViewer: React.FC<LogViewerProps> = ({
+export interface LogViewerRef {
+  goToLine: (lineNum: number) => void;
+}
+
+export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
   lineCount,
   chunks,
   searchResults,
   onGetChunk,
-  nbrColumns
-}) => {
+  nbrColumns,
+  onLineClick,
+  highlightedLine,
+  showHeader = false,
+  onClose,
+  title
+}, ref) => {
   const listRef = useRef<List>(null);
   const [containerHeight, setContainerHeight] = useState(600);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -198,6 +212,11 @@ export const LogViewer: React.FC<LogViewerProps> = ({
     }
   }, [lineCount, needsWindowing]);
 
+  // Expose goToLine method to parent via ref
+  useImperativeHandle(ref, () => ({
+    goToLine: handleGoToLine
+  }), [handleGoToLine]);
+
   const handleGoToLineSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     const lineNum = parseInt(goToLineInput, 10);
@@ -235,6 +254,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({
     const lineData = getLineData(index);
     const actualLineIndex = needsWindowing ? lineOffset + index : index;
     const hasMatch = searchIndex.current.has(actualLineIndex);
+    const isHighlighted = highlightedLine !== undefined && highlightedLine === actualLineIndex;
 
     if (!lineData) {
       return (
@@ -255,17 +275,23 @@ export const LogViewer: React.FC<LogViewerProps> = ({
 
     return (
       <div
+        onClick={() => onLineClick?.(actualLineIndex)}
         style={{
           ...style,
           paddingLeft: '8px',
           paddingRight: '8px',
           display: 'flex',
           alignItems: 'center',
-          backgroundColor: hasMatch ? 'var(--vscode-editor-findMatchHighlightBackground)' : 'transparent',
+          backgroundColor: isHighlighted
+            ? 'var(--vscode-list-activeSelectionBackground)'
+            : hasMatch
+            ? 'var(--vscode-editor-findMatchHighlightBackground)'
+            : 'transparent',
           fontFamily: 'var(--vscode-editor-font-family)',
           fontSize: 'var(--vscode-editor-font-size)',
           minWidth: '100%',
-          boxSizing: 'border-box'
+          boxSizing: 'border-box',
+          cursor: onLineClick ? 'pointer' : 'default'
         }}
       >
         {/* Line number - fixed width */}
@@ -312,7 +338,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({
         </div>
       </div>
     );
-  }, [getLineData, highlightMatches, nbrColumns, needsWindowing, lineOffset, columnWidths]);
+  }, [getLineData, highlightMatches, nbrColumns, needsWindowing, lineOffset, columnWidths, onLineClick, highlightedLine]);
 
   // Scroll to first search result
   useEffect(() => {
@@ -324,6 +350,25 @@ export const LogViewer: React.FC<LogViewerProps> = ({
 
   return (
     <div ref={containerRef} className="flex-1 flex flex-col overflow-hidden">
+      {showHeader && (
+        <div className="flex items-center justify-between px-4 py-2 border-b" style={{ borderColor: 'var(--vscode-panel-border)', backgroundColor: 'var(--vscode-sideBar-background)' }}>
+          <span className="text-sm font-semibold" style={{ color: 'var(--vscode-sideBarTitle-foreground)' }}>
+            {title || 'Search Results'}
+          </span>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="px-2 py-1 text-xs rounded transition-colors hover:bg-opacity-20"
+              style={{
+                color: 'var(--vscode-icon-foreground)'
+              }}
+              title="Close panel"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
       {needsWindowing && (
         <div className="flex items-center gap-3 px-4 py-2 border-b" style={{ borderColor: 'var(--vscode-panel-border)' }}>
           <div className="flex items-center gap-2">
@@ -498,4 +543,4 @@ export const LogViewer: React.FC<LogViewerProps> = ({
       </div>
     </div>
   );
-};
+});
