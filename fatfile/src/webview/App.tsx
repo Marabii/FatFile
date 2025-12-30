@@ -3,10 +3,12 @@ import { LogViewer } from './components/LogViewer';
 import { SearchBar } from './components/SearchBar';
 import { StatusBar } from './components/StatusBar';
 import { LoadingSpinner } from './components/LoadingSpinner';
+import { ParsingPreviewPanel } from './components/ParsingPreviewPanel';
 import type {
   Response,
   SearchMatch,
-  ExtensionMessage
+  ExtensionMessage,
+  LogFormat
 } from '../types';
 
 interface AppState {
@@ -19,8 +21,13 @@ interface AppState {
   isSearching: boolean;
   isLoading: boolean;
   error: string | null;
-  pattern?: string;
-  nbrColumns?: number;
+  encoding: string | null;
+  encodingSupported: boolean;
+  logFormat: LogFormat | null;
+  showParsingConfig: boolean;
+  previewLines: string[][];
+  isParsed: boolean;
+  parsingColumns: number | null;
 }
 
 declare const acquireVsCodeApi: () => {
@@ -42,25 +49,99 @@ export const App: React.FC = () => {
     isSearching: false,
     isLoading: false,
     error: null,
+    encoding: null,
+    encodingSupported: true,
+    logFormat: null,
+    showParsingConfig: false,
+    previewLines: [],
+    isParsed: false,
+    parsingColumns: null,
   });
 
   const handleResponse = useCallback((response: Response) => {
-    if ('FileOpened' in response) {
+    console.log('[WEBVIEW] Handling response:', response);
+
+    if ('Encoding' in response) {
+      console.log('[WEBVIEW] Received encoding response:', response.Encoding);
+      setState(prev => ({
+        ...prev,
+        encoding: response.Encoding.encoding,
+        encodingSupported: response.Encoding.is_supported
+      }));
+    } else if ('FileOpened' in response) {
+      console.log('[WEBVIEW] Received FileOpened response:', response.FileOpened);
       setState(prev => ({
         ...prev,
         lineCount: response.FileOpened.line_count,
-        isLoading: false,
         error: null
       }));
     } else if ('Chunk' in response) {
+      console.log('[WEBVIEW] Received Chunk response:', response.Chunk);
       setState(prev => {
-        const newChunks = new Map(prev.chunks);
-        newChunks.set(response.Chunk.start_line, response.Chunk.data);
-        return {
-          ...prev,
-          chunks: newChunks,
-          isLoading: false
-        };
+        // If we don't have preview lines yet and haven't configured parsing,
+        // use this chunk as the preview (taking only first 10 lines)
+        const needsPreview = prev.previewLines.length === 0 && !prev.showParsingConfig && !prev.isParsed;
+        console.log('[WEBVIEW] Needs preview?', needsPreview, {
+          previewLinesLength: prev.previewLines.length,
+          showParsingConfig: prev.showParsingConfig,
+          isParsed: prev.isParsed
+        });
+
+        if (needsPreview) {
+          console.log('[WEBVIEW] Storing as preview chunk, taking first 10 lines from', response.Chunk.data.length, 'lines');
+          return {
+            ...prev,
+            previewLines: response.Chunk.data.slice(0, 10)
+          };
+        } else {
+          // Regular chunk for viewing
+          console.log('[WEBVIEW] Storing regular chunk at line', response.Chunk.start_line, 'with', response.Chunk.data.length, 'lines');
+          console.log('[WEBVIEW] First line of chunk:', response.Chunk.data[0]);
+          console.log('[WEBVIEW] isParsed=', prev.isParsed, 'parsingColumns=', prev.parsingColumns);
+          const newChunks = new Map(prev.chunks);
+          newChunks.set(response.Chunk.start_line, response.Chunk.data);
+          return {
+            ...prev,
+            chunks: newChunks,
+            isLoading: false
+          };
+        }
+      });
+    } else if ('ParsingInformation' in response) {
+      console.log('[WEBVIEW] Received ParsingInformation response:', response.ParsingInformation);
+      setState(prev => {
+        // If we have parsingColumns set, this is a confirmation after applying parsing
+        if (prev.parsingColumns !== null) {
+          console.log('[WEBVIEW] Parsing confirmed, clearing chunks and setting isParsed=true');
+          return {
+            ...prev,
+            logFormat: response.ParsingInformation.log_format,
+            isParsed: true,
+            showParsingConfig: false,
+            isLoading: false,
+            chunks: new Map() // Clear chunks NOW so they reload as parsed
+            // Keep previewLines - no longer needed but clearing it triggers unwanted requests
+          };
+        }
+        // If we haven't shown the config yet, show it now (initial detection)
+        else if (!prev.showParsingConfig && !prev.isParsed) {
+          console.log('[WEBVIEW] Showing parsing config panel!');
+          return {
+            ...prev,
+            logFormat: response.ParsingInformation.log_format,
+            showParsingConfig: true,
+            isLoading: false
+          };
+        }
+        // Otherwise just update the format
+        else {
+          console.log('[WEBVIEW] Updating log format');
+          return {
+            ...prev,
+            logFormat: response.ParsingInformation.log_format,
+            isLoading: false
+          };
+        }
       });
     } else if ('SearchResults' in response) {
       setState(prev => ({
@@ -70,10 +151,10 @@ export const App: React.FC = () => {
         isSearching: false,
         searchProgress: 100
       }));
-    } else if ('SearchProgress' in response) {
+    } else if ('Progress' in response) {
       setState(prev => ({
         ...prev,
-        searchProgress: response.SearchProgress.percent
+        searchProgress: response.Progress.percent
       }));
     } else if ('Error' in response) {
       setState(prev => ({
@@ -83,48 +164,35 @@ export const App: React.FC = () => {
         isSearching: false
       }));
     } else if ('Info' in response) {
-      console.log('Backend info:', response.Info.message);
+      console.log('[WEBVIEW] Backend info:', response.Info.message);
     }
   }, []);
 
   useEffect(() => {
     const messageHandler = (event: MessageEvent) => {
       const message = event.data as ExtensionMessage;
-      console.log('Received message from extension:', message);
+      console.log('[WEBVIEW] <<<< Received message from extension:', message);
 
       if (message.type === 'init') {
         const filePath = message.filePath;
-        console.log('Initializing with file:', filePath);
+        console.log('[WEBVIEW] Initializing with file:', filePath);
         setState(prev => ({
           ...prev,
           filePath,
           isLoading: true
         }));
 
-        // Determine if we should use a regex pattern based on file extension
-        const defaultPattern = filePath.endsWith('.log')
-          ? '(\\d{1,3}(?:\\.\\d{1,3}){3}) - - \\[(.*?)\\] "(.*?)" (\\d{3}) (\\d+|-)'
-          : undefined;
-
-        const nbrColumns = defaultPattern ? 5 : undefined;
-
-        setState(prev => ({
-          ...prev,
-          pattern: defaultPattern,
-          nbrColumns
-        }));
-
-        console.log('Sending OpenFile command:', { path: filePath, pattern: defaultPattern, nbr_columns: nbrColumns });
+        // Start the initialization flow: GetFileEncoding -> OpenFile -> GetChunk -> GetParsingInformation
+        console.log('[WEBVIEW] >>>> Sending GetFileEncoding command:', { path: filePath });
         vscode.postMessage({
-          type: 'openFile',
-          path: filePath,
-          pattern: defaultPattern,
-          nbr_columns: nbrColumns
+          type: 'getFileEncoding',
+          path: filePath
         });
       } else if (message.type === 'response') {
-        console.log('Received response:', message.data);
+        console.log('[WEBVIEW] Got response message, calling handleResponse with:', message.data);
         handleResponse(message.data);
       } else if (message.type === 'error') {
+        console.log('[WEBVIEW] Got error message:', message.message);
         setState(prev => ({
           ...prev,
           error: message.message,
@@ -134,8 +202,12 @@ export const App: React.FC = () => {
       }
     };
 
+    console.log('[WEBVIEW] Setting up message listener');
     window.addEventListener('message', messageHandler);
-    return () => window.removeEventListener('message', messageHandler);
+    return () => {
+      console.log('[WEBVIEW] Removing message listener');
+      window.removeEventListener('message', messageHandler);
+    };
   }, [handleResponse]);
 
   const handleGetChunk = useCallback((startLine: number, endLine: number) => {
@@ -159,6 +231,88 @@ export const App: React.FC = () => {
       pattern
     });
   }, []);
+
+  const handleApplyParsing = useCallback((logFormat: LogFormat, pattern?: string, nbrColumns?: number) => {
+    console.log('[WEBVIEW] Applying parsing with format:', logFormat, 'pattern:', pattern, 'columns:', nbrColumns);
+
+    // Determine the number of columns for this format
+    const columns = nbrColumns || (logFormat !== 'Other' ? (
+      logFormat === 'CommonEventFormat' || logFormat === 'SyslogRFC5424' || logFormat === 'CommonLogFormat' ? 8 : 5
+    ) : 0);
+
+    setState(prev => ({
+      ...prev,
+      isLoading: true,
+      showParsingConfig: false, // Hide modal immediately
+      parsingColumns: columns // Store the number of columns
+    }));
+
+    vscode.postMessage({
+      type: 'parseFile',
+      log_format: logFormat,
+      pattern,
+      nbr_columns: nbrColumns
+    });
+  }, []);
+
+  const handleSkipParsing = useCallback(() => {
+    console.log('Skipping parsing');
+
+    setState(prev => ({
+      ...prev,
+      showParsingConfig: false,
+      isParsed: false,
+      isLoading: false
+    }));
+  }, []);
+
+  // After receiving encoding, open the file
+  useEffect(() => {
+    console.log('[WEBVIEW] useEffect[encoding]: encoding=', state.encoding, 'filePath=', state.filePath);
+    if (state.encoding && state.filePath) {
+      console.log('[WEBVIEW] >>>> Encoding received, opening file:', state.filePath);
+      vscode.postMessage({
+        type: 'openFile',
+        path: state.filePath
+      });
+    }
+  }, [state.encoding, state.filePath]);
+
+  // After file is opened, get first 10 lines for preview
+  useEffect(() => {
+    console.log('[WEBVIEW] useEffect[lineCount]: lineCount=', state.lineCount, 'previewLines.length=', state.previewLines.length, 'parsingColumns=', state.parsingColumns);
+    // Only request preview if we haven't started parsing yet
+    if (state.lineCount > 0 && state.previewLines.length === 0 && state.parsingColumns === null) {
+      console.log('[WEBVIEW] >>>> File opened, getting preview chunk');
+      vscode.postMessage({
+        type: 'getChunk',
+        start_line: 0,
+        end_line: 10
+      });
+    }
+  }, [state.lineCount, state.previewLines.length, state.parsingColumns]);
+
+  // After preview lines are received, get parsing information
+  useEffect(() => {
+    console.log('[WEBVIEW] useEffect[previewLines]: previewLines.length=', state.previewLines.length, 'logFormat=', state.logFormat, 'showParsingConfig=', state.showParsingConfig);
+    if (state.previewLines.length > 0 && !state.logFormat && !state.showParsingConfig) {
+      console.log('[WEBVIEW] >>>> Preview lines received, getting parsing information');
+      vscode.postMessage({
+        type: 'getParsingInformation'
+      });
+    }
+  }, [state.previewLines.length, state.logFormat, state.showParsingConfig]);
+
+  // Show encoding warning when encoding is not supported
+  useEffect(() => {
+    if (state.encoding && !state.encodingSupported) {
+      // Send a message to the extension to show a VSCode warning
+      vscode.postMessage({
+        type: 'showEncodingWarning',
+        encoding: state.encoding
+      });
+    }
+  }, [state.encoding, state.encodingSupported]);
 
   if (state.isLoading && state.lineCount === 0) {
     return (
@@ -187,6 +341,15 @@ export const App: React.FC = () => {
     );
   }
 
+  console.log('[WEBVIEW] RENDER: state=', {
+    showParsingConfig: state.showParsingConfig,
+    logFormat: state.logFormat,
+    previewLinesLength: state.previewLines.length,
+    isParsed: state.isParsed,
+    lineCount: state.lineCount,
+    encoding: state.encoding
+  });
+
   return (
     <div className="flex flex-col w-full h-full">
       <SearchBar
@@ -202,7 +365,7 @@ export const App: React.FC = () => {
         chunks={state.chunks}
         searchResults={state.searchResults}
         onGetChunk={handleGetChunk}
-        nbrColumns={state.nbrColumns}
+        nbrColumns={state.isParsed && state.parsingColumns ? state.parsingColumns : undefined}
       />
 
       <StatusBar
@@ -210,6 +373,19 @@ export const App: React.FC = () => {
         lineCount={state.lineCount}
         searchResultCount={state.searchResults.length}
       />
+
+      {/* Show parsing configuration modal as overlay */}
+      {state.showParsingConfig && state.logFormat && (() => {
+        console.log('[WEBVIEW] RENDERING MODAL WITH:', state.logFormat, state.previewLines.length);
+        return (
+          <ParsingPreviewPanel
+            logFormat={state.logFormat}
+            previewLines={state.previewLines}
+            onApply={handleApplyParsing}
+            onSkip={handleSkipParsing}
+          />
+        );
+      })()}
     </div>
   );
 };

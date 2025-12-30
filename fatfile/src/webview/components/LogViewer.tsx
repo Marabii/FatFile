@@ -49,6 +49,14 @@ export const LogViewer: React.FC<LogViewerProps> = ({
   // Build search result index for quick lookup
   const searchIndex = useRef<Map<number, SearchMatch[]>>(new Map());
 
+  // Clear loadedChunks when chunks Map is empty (indicates a reset/reload)
+  useEffect(() => {
+    if (chunks.size === 0) {
+      console.log('[LogViewer] Chunks cleared, resetting loadedChunks ref');
+      loadedChunks.current.clear();
+    }
+  }, [chunks]);
+
   useEffect(() => {
     searchIndex.current = new Map();
     for (const match of searchResults) {
