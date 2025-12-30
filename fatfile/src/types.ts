@@ -1,7 +1,32 @@
 // Backend Protocol Types
+export type LogFormat =
+  | 'CommonLogFormat'
+  | 'SyslogRFC3164'
+  | 'SyslogRFC5424'
+  | 'W3CExtended'
+  | 'CommonEventFormat'
+  | 'NCSACombined'
+  | 'Other';
+
+export interface GetFileEncodingCommand {
+  GetFileEncoding: {
+    path: string;
+  };
+}
+
 export interface OpenFileCommand {
   OpenFile: {
     path: string;
+  };
+}
+
+export interface GetParsingInformationCommand {
+  GetParsingInformation: null;
+}
+
+export interface ParseFileCommand {
+  ParseFile: {
+    log_format: LogFormat;
     pattern?: string;
     nbr_columns?: number;
   };
@@ -20,11 +45,30 @@ export interface SearchCommand {
   };
 }
 
-export type Command = OpenFileCommand | GetChunkCommand | SearchCommand;
+export type Command =
+  | GetFileEncodingCommand
+  | OpenFileCommand
+  | GetParsingInformationCommand
+  | ParseFileCommand
+  | GetChunkCommand
+  | SearchCommand;
+
+export interface EncodingResponse {
+  Encoding: {
+    encoding: string;
+    is_supported: boolean;
+  };
+}
 
 export interface FileOpenedResponse {
   FileOpened: {
     line_count: number;
+  };
+}
+
+export interface ParsingInformationResponse {
+  ParsingInformation: {
+    log_format: LogFormat;
   };
 }
 
@@ -77,7 +121,9 @@ export interface InfoResponse {
 }
 
 export type Response =
+  | EncodingResponse
   | FileOpenedResponse
+  | ParsingInformationResponse
   | ChunkResponse
   | SearchResultsResponse
   | SearchProgressResponse
@@ -86,9 +132,23 @@ export type Response =
   | InfoResponse;
 
 // Webview Message Types
+export interface WebviewGetFileEncodingMessage {
+  type: 'getFileEncoding';
+  path: string;
+}
+
 export interface WebviewOpenFileMessage {
   type: 'openFile';
   path: string;
+}
+
+export interface WebviewGetParsingInformationMessage {
+  type: 'getParsingInformation';
+}
+
+export interface WebviewParseFileMessage {
+  type: 'parseFile';
+  log_format: LogFormat;
   pattern?: string;
   nbr_columns?: number;
 }
@@ -104,10 +164,19 @@ export interface WebviewSearchMessage {
   pattern: string;
 }
 
+export interface WebviewShowEncodingWarningMessage {
+  type: 'showEncodingWarning';
+  encoding: string;
+}
+
 export type WebviewMessage =
+  | WebviewGetFileEncodingMessage
   | WebviewOpenFileMessage
+  | WebviewGetParsingInformationMessage
+  | WebviewParseFileMessage
   | WebviewGetChunkMessage
-  | WebviewSearchMessage;
+  | WebviewSearchMessage
+  | WebviewShowEncodingWarningMessage;
 
 export interface ExtensionResponseMessage {
   type: 'response';
@@ -124,4 +193,14 @@ export interface ExtensionInitMessage {
   filePath: string;
 }
 
-export type ExtensionMessage = ExtensionResponseMessage | ExtensionErrorMessage | ExtensionInitMessage;
+export interface ExtensionShowParsingConfigMessage {
+  type: 'showParsingConfig';
+  logFormat: LogFormat;
+  previewLines: string[][];
+}
+
+export type ExtensionMessage =
+  | ExtensionResponseMessage
+  | ExtensionErrorMessage
+  | ExtensionInitMessage
+  | ExtensionShowParsingConfigMessage;

@@ -37,12 +37,25 @@ export class LogFileEditorProvider implements vscode.CustomReadonlyEditorProvide
 
     // Start backend and handle responses
     try {
-      await backendManager.start((response: Response) => {
-        webviewPanel.webview.postMessage({
-          type: 'response',
-          data: response
-        });
-      });
+      await backendManager.start(
+        (response: Response) => {
+          // Handle Info responses by showing VSCode messages
+          if ('Info' in response) {
+            vscode.window.showInformationMessage(`FatFile: ${response.Info.message}`);
+          }
+
+          // Forward response to webview
+          webviewPanel.webview.postMessage({
+            type: 'response',
+            data: response
+          });
+        },
+        () => {
+          // Backend exited - close the editor
+          console.log('Backend exited, disposing webview panel');
+          webviewPanel.dispose();
+        }
+      );
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to start backend';
       vscode.window.showErrorMessage(`FatFile: ${errorMessage}`);
@@ -58,11 +71,36 @@ export class LogFileEditorProvider implements vscode.CustomReadonlyEditorProvide
       console.log('Received message from webview:', message);
       try {
         switch (message.type) {
+          case 'getFileEncoding':
+            console.log('Getting file encoding:', message.path);
+            backendManager.sendCommand({
+              GetFileEncoding: {
+                path: message.path
+              }
+            });
+            break;
+
           case 'openFile':
             console.log('Opening file:', message.path);
             backendManager.sendCommand({
               OpenFile: {
-                path: message.path,
+                path: message.path
+              }
+            });
+            break;
+
+          case 'getParsingInformation':
+            console.log('Getting parsing information');
+            backendManager.sendCommand({
+              GetParsingInformation: null
+            });
+            break;
+
+          case 'parseFile':
+            console.log('Parsing file with format:', message.log_format);
+            backendManager.sendCommand({
+              ParseFile: {
+                log_format: message.log_format,
                 pattern: message.pattern,
                 nbr_columns: message.nbr_columns
               }
@@ -84,6 +122,12 @@ export class LogFileEditorProvider implements vscode.CustomReadonlyEditorProvide
                 pattern: message.pattern
               }
             });
+            break;
+
+          case 'showEncodingWarning':
+            vscode.window.showWarningMessage(
+              `FatFile: The file encoding (${message.encoding}) is not supported. The file will be treated as UTF-8, which may result in gibberish or incorrect characters.`
+            );
             break;
         }
       } catch (err) {

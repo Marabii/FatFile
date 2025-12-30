@@ -12,7 +12,10 @@ export class BackendManager {
     this.extensionPath = extensionPath;
   }
 
-  async start(onMessage: (response: Response) => void): Promise<void> {
+  async start(
+    onMessage: (response: Response) => void,
+    onExit?: () => void
+  ): Promise<void> {
     if (this.process) {
       return;
     }
@@ -76,6 +79,9 @@ export class BackendManager {
         vscode.window.showErrorMessage(`Backend process crashed with code ${code}`);
       }
       this.process = null;
+      if (onExit) {
+        onExit();
+      }
     });
 
     // Keep the process alive
