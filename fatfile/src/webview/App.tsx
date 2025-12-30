@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { LogViewer } from './components/LogViewer';
 import { SearchBar } from './components/SearchBar';
-import { StatusBar } from './components/StatusBar';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { ParsingPreviewPanel } from './components/ParsingPreviewPanel';
 import type {
@@ -352,14 +351,6 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex flex-col w-full h-full">
-      <SearchBar
-        onSearch={handleSearch}
-        isSearching={state.isSearching}
-        searchProgress={state.searchProgress}
-        totalResults={state.searchResults.length}
-        searchComplete={state.searchComplete}
-      />
-
       <LogViewer
         lineCount={state.lineCount}
         chunks={state.chunks}
@@ -368,10 +359,14 @@ export const App: React.FC = () => {
         nbrColumns={state.isParsed && state.parsingColumns ? state.parsingColumns : undefined}
       />
 
-      <StatusBar
+      <SearchBar
+        onSearch={handleSearch}
+        isSearching={state.isSearching}
+        searchProgress={state.searchProgress}
+        totalResults={state.searchResults.length}
+        searchComplete={state.searchComplete}
         fileName={state.filePath.split('/').pop() || ''}
         lineCount={state.lineCount}
-        searchResultCount={state.searchResults.length}
       />
 
       {/* Show parsing configuration modal as overlay */}
