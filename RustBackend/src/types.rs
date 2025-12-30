@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Command {
-    GetFileMetadata {
+    GetFileEncoding {
         path: String,
     },
     OpenFile {
@@ -15,6 +15,7 @@ pub enum Command {
         #[serde(default)]
         nbr_columns: Option<u8>,
     },
+    GetParsingInformation,
     GetChunk {
         start_line: u64,
         end_line: u64,
@@ -29,7 +30,7 @@ pub enum Command {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Response {
-    MetaData {
+    Encoding {
         encoding: String,
         is_supported: bool,
     },

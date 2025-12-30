@@ -5,8 +5,8 @@ use encoding_rs::Encoding;
 
 use crate::Response;
 
-pub fn get_file_metadata(path: &str) -> Response {
-    let result = get_file_metadata_helper(path);
+pub fn get_file_encoding(path: &str) -> Response {
+    let result = get_file_encoding_helper(path);
     let encoding_name = match result {
         Ok(name) => name,
         Err(err) => {
@@ -22,7 +22,7 @@ pub fn get_file_metadata(path: &str) -> Response {
     let enc = match Encoding::for_label(encoding_name.as_bytes()) {
         Some(v) => v,
         None => {
-            return Response::MetaData {
+            return Response::Encoding {
                 encoding: encoding_name,
                 is_supported: false,
             };
@@ -31,13 +31,13 @@ pub fn get_file_metadata(path: &str) -> Response {
 
     let is_supported = is_supported || enc.is_ascii_compatible();
 
-    Response::MetaData {
+    Response::Encoding {
         encoding: encoding_name,
         is_supported,
     }
 }
 
-fn get_file_metadata_helper(path: &str) -> Result<String, Response> {
+fn get_file_encoding_helper(path: &str) -> Result<String, Response> {
     let path = Path::new(path);
     if !path.is_absolute() {
         let response = Response::Error {
