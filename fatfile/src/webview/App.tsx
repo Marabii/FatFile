@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useRef, useMemo } from "react";
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+} from "react";
 import { LogViewer, type LogViewerRef } from "./components/LogViewer";
 import { SearchBar } from "./components/SearchBar";
 import { LoadingSpinner } from "./components/LoadingSpinner";
@@ -40,8 +46,12 @@ export const App: React.FC = () => {
   });
 
   // Event handlers
-  const { handleGetChunk, handleSearch, handleApplyParsing, handleSkipParsing } =
-    useEventHandlers({ vscode, setState });
+  const {
+    handleGetChunk,
+    handleSearch,
+    handleApplyParsing,
+    handleSkipParsing,
+  } = useEventHandlers({ vscode, setState });
 
   // Search results processing
   const {
@@ -74,9 +84,16 @@ export const App: React.FC = () => {
 
   // Wrap handleCloseResults to also reset highlighting
   const handleCloseResultsWithReset = useCallback(() => {
+    setHighlightedLine(undefined); // Reset highlighting first
     handleCloseResults();
-    setHighlightedLine(undefined); // Reset highlighting
   }, [handleCloseResults]);
+
+  // Clear highlighting when search panel closes
+  useEffect(() => {
+    if (!showResultsPanel) {
+      setHighlightedLine(undefined);
+    }
+  }, [showResultsPanel]);
 
   // Toggle Live Tail mode
   const handleToggleLiveTail = useCallback(() => {
