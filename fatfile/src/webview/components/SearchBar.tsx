@@ -52,9 +52,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
   return (
     <div
-      className="flex flex-col border-t"
+      className="flex flex-col"
       style={{
-        borderColor: "var(--vscode-panel-border)",
         backgroundColor: "var(--vscode-statusBar-background)",
       }}
     >

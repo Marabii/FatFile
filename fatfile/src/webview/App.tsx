@@ -105,6 +105,7 @@ export const App: React.FC = () => {
   const [showResultsPanel, setShowResultsPanel] = useState(false);
   const [highlightedLine, setHighlightedLine] = useState<number | undefined>();
   const mainViewerRef = useRef<LogViewerRef>(null);
+  const [isLiveTailActive, setIsLiveTailActive] = useState(false);
 
   const handleResponse = useCallback((response: Response) => {
     console.log("[WEBVIEW] Handling response:", response);
@@ -634,6 +635,11 @@ export const App: React.FC = () => {
     setHighlightedLine(undefined);
   }, []);
 
+  // Toggle Live Tail mode
+  const handleToggleLiveTail = useCallback(() => {
+    setIsLiveTailActive(prev => !prev);
+  }, []);
+
   if (state.isLoading && state.lineCount === 0) {
     return (
       <div className="flex items-center justify-center w-full h-full">
@@ -692,6 +698,7 @@ export const App: React.FC = () => {
             }
             highlightedLine={highlightedLine}
             onChunkAccessed={markChunkAccessed}
+            isLiveTailActive={isLiveTailActive}
           />
         </div>
 
@@ -721,16 +728,56 @@ export const App: React.FC = () => {
         )}
       </div>
 
-      {/* Search bar at bottom */}
-      <SearchBar
-        onSearch={handleSearch}
-        isSearching={state.isSearching}
-        searchProgress={state.searchProgress}
-        totalResults={state.searchResults.length}
-        searchComplete={state.searchComplete}
-        fileName={state.filePath.split("/").pop() || ""}
-        lineCount={state.lineCount}
-      />
+      {/* Bottom toolbar with Live Tail and Search bar */}
+      <div className="flex items-center gap-3 border-t" style={{
+        borderColor: 'var(--vscode-panel-border)',
+        backgroundColor: 'var(--vscode-statusBar-background)',
+        paddingLeft: '16px'
+      }}>
+        {/* Live Tail button */}
+        <button
+          onClick={handleToggleLiveTail}
+          className="px-3 py-1 text-xs rounded transition-all flex items-center gap-2"
+          style={{
+            backgroundColor: isLiveTailActive
+              ? 'var(--vscode-button-background)'
+              : 'var(--vscode-button-secondaryBackground)',
+            color: isLiveTailActive
+              ? 'var(--vscode-button-foreground)'
+              : 'var(--vscode-button-secondaryForeground)',
+            border: isLiveTailActive
+              ? '1px solid var(--vscode-button-border)'
+              : '1px solid var(--vscode-button-border)',
+            fontWeight: isLiveTailActive ? 600 : 400
+          }}
+          title={isLiveTailActive ? 'Disable Live Tail mode' : 'Enable Live Tail mode - automatically scroll to new lines'}
+        >
+          {isLiveTailActive ? (
+            <>
+              <span style={{ color: '#4EC9B0' }}>●</span>
+              Live Tail
+            </>
+          ) : (
+            <>
+              <span style={{ opacity: 0.5 }}>○</span>
+              Live Tail
+            </>
+          )}
+        </button>
+
+        {/* Search bar */}
+        <div className="flex-1">
+          <SearchBar
+            onSearch={handleSearch}
+            isSearching={state.isSearching}
+            searchProgress={state.searchProgress}
+            totalResults={state.searchResults.length}
+            searchComplete={state.searchComplete}
+            fileName={state.filePath.split("/").pop() || ""}
+            lineCount={state.lineCount}
+          />
+        </div>
+      </div>
 
       {/* Show parsing configuration modal as overlay */}
       {state.showParsingConfig &&
