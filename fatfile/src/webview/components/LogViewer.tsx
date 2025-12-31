@@ -14,6 +14,7 @@ interface LogViewerProps {
   showHeader?: boolean;
   onClose?: () => void;
   title?: string;
+  onChunkAccessed?: (chunkStart: number) => void;
 }
 
 const CHUNK_SIZE = 100;
@@ -44,7 +45,8 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
   highlightedLine,
   showHeader = false,
   onClose,
-  title
+  title,
+  onChunkAccessed
 }, ref) => {
   const listRef = useRef<List>(null);
   const [containerHeight, setContainerHeight] = useState(600);
@@ -141,9 +143,12 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
       return null;
     }
 
+    // Mark chunk as accessed for LRU tracking
+    onChunkAccessed?.(chunkStart);
+
     const offsetInChunk = actualLineIndex - chunkStart;
     return chunk[offsetInChunk] || null;
-  }, [chunks, ensureChunkLoaded, needsWindowing, lineOffset]);
+  }, [chunks, ensureChunkLoaded, needsWindowing, lineOffset, onChunkAccessed]);
 
   // Highlight matches in text
   const highlightMatches = useCallback((text: string, lineNumber: number, columnIndex: number) => {
