@@ -275,15 +275,24 @@ impl FileProcessor {
         // Clamp end_line to available lines
         let actual_end_line = end_line.min(line_count - 1);
 
+        // Determine newline size based on encoding mode
+        // UTF-16LE: newline is 0x0A 0x00 (2 bytes)
+        // UTF-16BE: newline is 0x00 0x0A (2 bytes)
+        // ASCII-compatible: newline is 0x0A (1 byte)
+        let newline_size = match self.mode {
+            EncodingMode::Utf16LE | EncodingMode::Utf16BE => 2,
+            EncodingMode::AsciiCompatible => 1,
+        };
+
         // Calculate byte positions to read from
         let start_pos = if start_line == 0 {
             0
         } else {
-            self.index[(start_line - 1) as usize] + 1
+            self.index[(start_line - 1) as usize] + newline_size
         };
 
         // Read up to and including the newline at actual_end_line
-        let end_pos = self.index[actual_end_line as usize] + 1;
+        let end_pos = self.index[actual_end_line as usize] + newline_size;
         let bytes_to_read = (end_pos - start_pos) as usize;
 
         // Read the raw bytes
