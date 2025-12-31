@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    services::{FileProcessor, FileState},
+    services::{FileProcessor, FileState, file_processor::FileChangeType},
     types::Response,
 };
 
@@ -52,14 +52,19 @@ pub fn open_file(
 
             let mut file_state_guard = cloned_file_state.lock().unwrap();
             if let Some(ref mut fp) = *file_state_guard
-                && let Ok(changed) = fp.processor.refresh_if_needed()
-                && changed
+                && let Ok(Some((change_type, old_count, new_count))) = fp.processor.refresh_if_needed()
             {
-                let info_message = Response::Info {
-                    message: "File updated: re-indexed".to_string(),
+                let response = match change_type {
+                    FileChangeType::Truncated => Response::FileTruncated {
+                        line_count: new_count,
+                    },
+                    FileChangeType::LinesAdded => Response::LinesAdded {
+                        old_line_count: old_count,
+                        new_line_count: new_count,
+                    },
                 };
-                println!("{}", serde_json::to_string(&info_message).unwrap());
-            }
+                println!("{}", serde_json::to_string(&response).unwrap());
+                      }
         }
     }));
 

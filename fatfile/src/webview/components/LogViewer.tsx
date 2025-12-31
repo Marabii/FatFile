@@ -15,6 +15,7 @@ interface LogViewerProps {
   onClose?: () => void;
   title?: string;
   onChunkAccessed?: (chunkStart: number) => void;
+  enableLiveTail?: boolean;
 }
 
 const CHUNK_SIZE = 100;
@@ -46,7 +47,8 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
   showHeader = false,
   onClose,
   title,
-  onChunkAccessed
+  onChunkAccessed,
+  enableLiveTail = true
 }, ref) => {
   const listRef = useRef<List>(null);
   const [containerHeight, setContainerHeight] = useState(600);
@@ -58,6 +60,10 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
   const [lineOffset, setLineOffset] = useState(0);
   const [goToLineInput, setGoToLineInput] = useState('');
 
+  // Live Tail state
+  const [isLiveTailActive, setIsLiveTailActive] = useState(false);
+  const previousLineCount = useRef(lineCount);
+
   // Determine if we need windowing
   const needsWindowing = lineCount > MAX_VIRTUAL_ITEMS;
   const virtualItemCount = needsWindowing ? MAX_VIRTUAL_ITEMS : lineCount;
@@ -68,11 +74,23 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
   // Build search result index for quick lookup
   const searchIndex = useRef<Map<number, SearchMatch[]>>(new Map());
 
-  // Clear loadedChunks when chunks Map is empty (indicates a reset/reload)
+  // Clear loadedChunks when chunks are removed
   useEffect(() => {
     if (chunks.size === 0) {
-      console.log('[LogViewer] Chunks cleared, resetting loadedChunks ref');
+      console.log('[LogViewer] All chunks cleared, resetting loadedChunks ref');
       loadedChunks.current.clear();
+    } else {
+      // Remove from loadedChunks any chunks that are no longer in the chunks Map
+      const chunksToRemove: number[] = [];
+      loadedChunks.current.forEach(chunkStart => {
+        if (!chunks.has(chunkStart)) {
+          chunksToRemove.push(chunkStart);
+        }
+      });
+      chunksToRemove.forEach(chunk => {
+        loadedChunks.current.delete(chunk);
+        console.log('[LogViewer] Removed chunk from loadedChunks:', chunk);
+      });
     }
   }, [chunks]);
 
@@ -347,11 +365,77 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
 
   // Scroll to first search result
   useEffect(() => {
-    if (searchResults.length > 0) {
+    if (searchResults.length > 0 && !isLiveTailActive) {
       const firstMatch = searchResults[0];
       handleGoToLine(firstMatch.line_number + 1);
     }
-  }, [searchResults, handleGoToLine]);
+  }, [searchResults, handleGoToLine, isLiveTailActive]);
+
+  // Handle Live Tail mode
+  const scrollToEnd = useCallback(() => {
+    if (lineCount > 0) {
+      if (needsWindowing) {
+        // Set offset to show the last window
+        const newOffset = Math.max(0, lineCount - MAX_VIRTUAL_ITEMS);
+        setLineOffset(newOffset);
+
+        // Scroll to the bottom of the virtual list
+        setTimeout(() => {
+          if (listRef.current) {
+            const virtualIndex = lineCount - newOffset - 1;
+            listRef.current.scrollToItem(virtualIndex, 'end');
+          }
+        }, 100);
+      } else {
+        if (listRef.current) {
+          listRef.current.scrollToItem(lineCount - 1, 'end');
+        }
+      }
+    }
+  }, [lineCount, needsWindowing]);
+
+  // Toggle Live Tail mode
+  const handleToggleLiveTail = useCallback(() => {
+    setIsLiveTailActive(prev => {
+      const newValue = !prev;
+      if (newValue) {
+        // When activating, scroll to end
+        scrollToEnd();
+      }
+      return newValue;
+    });
+  }, [scrollToEnd]);
+
+  // When lineCount increases and live tail is active, fetch new chunks and scroll to end
+  useEffect(() => {
+    if (isLiveTailActive && lineCount > previousLineCount.current) {
+      const oldCount = previousLineCount.current;
+      const newCount = lineCount;
+
+      console.log('[LiveTail] New lines detected:', oldCount, '->', newCount);
+
+      // Fetch the new lines
+      const startLine = oldCount;
+      const endLine = newCount;
+      const chunkStart = Math.floor(startLine / CHUNK_SIZE) * CHUNK_SIZE;
+      const chunkEnd = Math.min(Math.ceil(endLine / CHUNK_SIZE) * CHUNK_SIZE, newCount);
+
+      // Request any missing chunks
+      for (let chunk = chunkStart; chunk < chunkEnd; chunk += CHUNK_SIZE) {
+        if (!chunks.has(chunk)) {
+          const actualChunkEnd = Math.min(chunk + CHUNK_SIZE, lineCount);
+          onGetChunk(chunk, actualChunkEnd);
+        }
+      }
+
+      // Scroll to end
+      setTimeout(() => {
+        scrollToEnd();
+      }, 100);
+    }
+
+    previousLineCount.current = lineCount;
+  }, [lineCount, isLiveTailActive, chunks, onGetChunk, scrollToEnd]);
 
   return (
     <div ref={containerRef} className="flex-1 flex flex-col overflow-hidden">
@@ -488,7 +572,7 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
                     <Draggable
                       axis="x"
                       position={{ x: 0, y: 0 }}
-                      onDrag={(e, data) => {
+                      onDrag={(_e, data) => {
                         handleColumnResize(colIndex, data.deltaX);
                       }}
                     >
@@ -534,7 +618,8 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
           ref={listRef}
           height={
             (needsWindowing ? containerHeight - 40 : containerHeight) -
-            (nbrColumns && nbrColumns > 0 ? 28 : 0)
+            (nbrColumns && nbrColumns > 0 ? 28 : 0) -
+            (enableLiveTail && !showHeader ? 36 : 0) // Reserve space for Live Tail button
           }
           itemCount={virtualItemCount}
           itemSize={LINE_HEIGHT}
@@ -546,6 +631,48 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
           {Row}
         </List>
       </div>
+
+      {/* Live Tail button - only show in main viewer (not in search results panel) */}
+      {enableLiveTail && !showHeader && (
+        <div
+          className="flex items-center justify-center px-4 py-2 border-t"
+          style={{
+            borderColor: 'var(--vscode-panel-border)',
+            backgroundColor: 'var(--vscode-editor-background)',
+            height: '36px'
+          }}
+        >
+          <button
+            onClick={handleToggleLiveTail}
+            className="px-3 py-1 text-xs rounded transition-all flex items-center gap-2"
+            style={{
+              backgroundColor: isLiveTailActive
+                ? 'var(--vscode-button-background)'
+                : 'var(--vscode-button-secondaryBackground)',
+              color: isLiveTailActive
+                ? 'var(--vscode-button-foreground)'
+                : 'var(--vscode-button-secondaryForeground)',
+              border: isLiveTailActive
+                ? '1px solid var(--vscode-button-border)'
+                : '1px solid var(--vscode-button-border)',
+              fontWeight: isLiveTailActive ? 600 : 400
+            }}
+            title={isLiveTailActive ? 'Disable Live Tail mode' : 'Enable Live Tail mode - automatically scroll to new lines'}
+          >
+            {isLiveTailActive ? (
+              <>
+                <span style={{ color: '#4EC9B0' }}>●</span>
+                Live Tail Active
+              </>
+            ) : (
+              <>
+                <span style={{ opacity: 0.5 }}>○</span>
+                Live Tail
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 });

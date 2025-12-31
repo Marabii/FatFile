@@ -79,6 +79,13 @@ pub enum Response {
     Info {
         message: String,
     },
+    FileTruncated {
+        line_count: u64,
+    },
+    LinesAdded {
+        old_line_count: u64,
+        new_line_count: u64,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

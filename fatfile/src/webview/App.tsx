@@ -258,6 +258,48 @@ export const App: React.FC = () => {
       }));
     } else if ("Info" in response) {
       console.log("[WEBVIEW] Backend info:", response.Info.message);
+    } else if ("FileTruncated" in response) {
+      console.log("[WEBVIEW] File was truncated, new line count:", response.FileTruncated.line_count);
+      setState((prev) => ({
+        ...prev,
+        lineCount: response.FileTruncated.line_count,
+        chunks: new Map(), // Clear chunks as file was truncated
+      }));
+      // Clear LRU cache
+      chunkAccessTimes.clear();
+    } else if ("LinesAdded" in response) {
+      console.log("[WEBVIEW] New lines added:", response.LinesAdded.old_line_count, "->", response.LinesAdded.new_line_count);
+      setState((prev) => {
+        // Clear chunks that might contain the new lines
+        // We need to clear from the old line count onwards
+        const CHUNK_SIZE = 100;
+        const oldCount = response.LinesAdded.old_line_count;
+        const newChunks = new Map(prev.chunks);
+
+        // Calculate which chunks might be affected
+        const firstAffectedChunk = Math.floor((oldCount - 1) / CHUNK_SIZE) * CHUNK_SIZE;
+
+        // Remove all chunks from the affected chunk onwards
+        const chunksToRemove: number[] = [];
+        for (const chunkStart of newChunks.keys()) {
+          if (chunkStart >= firstAffectedChunk) {
+            chunksToRemove.push(chunkStart);
+          }
+        }
+
+        for (const chunk of chunksToRemove) {
+          newChunks.delete(chunk);
+          chunkAccessTimes.delete(chunk);
+        }
+
+        console.log("[WEBVIEW] Cleared chunks:", chunksToRemove);
+
+        return {
+          ...prev,
+          lineCount: response.LinesAdded.new_line_count,
+          chunks: newChunks,
+        };
+      });
     }
   }, []);
 

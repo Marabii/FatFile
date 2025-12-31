@@ -120,6 +120,19 @@ export interface InfoResponse {
   };
 }
 
+export interface FileTruncatedResponse {
+  FileTruncated: {
+    line_count: number;
+  };
+}
+
+export interface LinesAddedResponse {
+  LinesAdded: {
+    old_line_count: number;
+    new_line_count: number;
+  };
+}
+
 export type Response =
   | EncodingResponse
   | FileOpenedResponse
@@ -129,7 +142,9 @@ export type Response =
   | SearchProgressResponse
   | ProgressResponse
   | ErrorResponse
-  | InfoResponse;
+  | InfoResponse
+  | FileTruncatedResponse
+  | LinesAddedResponse;
 
 // Webview Message Types
 export interface WebviewGetFileEncodingMessage {

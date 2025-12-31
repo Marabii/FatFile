@@ -8,6 +8,12 @@ use crate::Response;
 use crate::services::commands;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FileChangeType {
+    Truncated,
+    LinesAdded,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum EncodingMode {
     AsciiCompatible, // UTF-8, Latin1, ASCII, etc.
     Utf16LE,         // \n is 0x0A 0x00
@@ -135,7 +141,7 @@ impl FileProcessor {
                     }
 
                     for pos in memchr_iter(b'\n', chunk) {
-                        // Search for 0x0A
+                        // Search for 0x0Afatfile/src/webview/components/LogViewer.tsx
                         let abs_pos = total_offset + pos as u64;
 
                         // Check alignment: 0x0A must be the first byte of the pair (Even index)
@@ -192,17 +198,21 @@ impl FileProcessor {
         Ok(total_offset)
     }
 
-    pub fn refresh_if_needed(&mut self) -> std::io::Result<bool> {
+    pub fn refresh_if_needed(&mut self) -> std::io::Result<Option<(FileChangeType, u64, u64)>> {
         let current_size = std::fs::metadata(&self.file_path)?.len();
 
         if current_size < self.last_file_size {
+            let old_line_count = self.index.len() as u64;
             self.full_reindex()?;
-            Ok(true)
+            let new_line_count = self.index.len() as u64;
+            Ok(Some((FileChangeType::Truncated, old_line_count, new_line_count)))
         } else if current_size > self.last_file_size {
+            let old_line_count = self.index.len() as u64;
             self.incremental_index()?;
-            Ok(true)
+            let new_line_count = self.index.len() as u64;
+            Ok(Some((FileChangeType::LinesAdded, old_line_count, new_line_count)))
         } else {
-            Ok(false)
+            Ok(None)
         }
     }
 
