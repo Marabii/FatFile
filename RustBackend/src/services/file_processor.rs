@@ -10,7 +10,7 @@ use crate::services::commands;
 #[derive(Debug, Clone, PartialEq)]
 pub enum FileChangeType {
     Truncated,
-    LinesAdded { new_lines: Vec<Vec<String>> },
+    LinesAdded,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
