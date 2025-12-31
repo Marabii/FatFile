@@ -15,7 +15,7 @@ interface LogViewerProps {
   onClose?: () => void;
   title?: string;
   onChunkAccessed?: (chunkStart: number) => void;
-  enableLiveTail?: boolean;
+  isLiveTailActive?: boolean;
 }
 
 const CHUNK_SIZE = 100;
@@ -48,7 +48,7 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
   onClose,
   title,
   onChunkAccessed,
-  enableLiveTail = true
+  isLiveTailActive = false
 }, ref) => {
   const listRef = useRef<List>(null);
   const [containerHeight, setContainerHeight] = useState(600);
@@ -60,8 +60,7 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
   const [lineOffset, setLineOffset] = useState(0);
   const [goToLineInput, setGoToLineInput] = useState('');
 
-  // Live Tail state
-  const [isLiveTailActive, setIsLiveTailActive] = useState(false);
+  // Live Tail tracking
   const previousLineCount = useRef(lineCount);
 
   // Determine if we need windowing
@@ -394,18 +393,6 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
     }
   }, [lineCount, needsWindowing]);
 
-  // Toggle Live Tail mode
-  const handleToggleLiveTail = useCallback(() => {
-    setIsLiveTailActive(prev => {
-      const newValue = !prev;
-      if (newValue) {
-        // When activating, scroll to end
-        scrollToEnd();
-      }
-      return newValue;
-    });
-  }, [scrollToEnd]);
-
   // When lineCount increases and live tail is active, fetch new chunks and scroll to end
   useEffect(() => {
     if (isLiveTailActive && lineCount > previousLineCount.current) {
@@ -436,6 +423,13 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
 
     previousLineCount.current = lineCount;
   }, [lineCount, isLiveTailActive, chunks, onGetChunk, scrollToEnd]);
+
+  // When live tail is activated, scroll to end
+  useEffect(() => {
+    if (isLiveTailActive) {
+      scrollToEnd();
+    }
+  }, [isLiveTailActive, scrollToEnd]);
 
   return (
     <div ref={containerRef} className="flex-1 flex flex-col overflow-hidden">
@@ -618,8 +612,7 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
           ref={listRef}
           height={
             (needsWindowing ? containerHeight - 40 : containerHeight) -
-            (nbrColumns && nbrColumns > 0 ? 28 : 0) -
-            (enableLiveTail && !showHeader ? 36 : 0) // Reserve space for Live Tail button
+            (nbrColumns && nbrColumns > 0 ? 28 : 0)
           }
           itemCount={virtualItemCount}
           itemSize={LINE_HEIGHT}
@@ -631,48 +624,6 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
           {Row}
         </List>
       </div>
-
-      {/* Live Tail button - only show in main viewer (not in search results panel) */}
-      {enableLiveTail && !showHeader && (
-        <div
-          className="flex items-center justify-center px-4 py-2 border-t"
-          style={{
-            borderColor: 'var(--vscode-panel-border)',
-            backgroundColor: 'var(--vscode-editor-background)',
-            height: '36px'
-          }}
-        >
-          <button
-            onClick={handleToggleLiveTail}
-            className="px-3 py-1 text-xs rounded transition-all flex items-center gap-2"
-            style={{
-              backgroundColor: isLiveTailActive
-                ? 'var(--vscode-button-background)'
-                : 'var(--vscode-button-secondaryBackground)',
-              color: isLiveTailActive
-                ? 'var(--vscode-button-foreground)'
-                : 'var(--vscode-button-secondaryForeground)',
-              border: isLiveTailActive
-                ? '1px solid var(--vscode-button-border)'
-                : '1px solid var(--vscode-button-border)',
-              fontWeight: isLiveTailActive ? 600 : 400
-            }}
-            title={isLiveTailActive ? 'Disable Live Tail mode' : 'Enable Live Tail mode - automatically scroll to new lines'}
-          >
-            {isLiveTailActive ? (
-              <>
-                <span style={{ color: '#4EC9B0' }}>●</span>
-                Live Tail Active
-              </>
-            ) : (
-              <>
-                <span style={{ opacity: 0.5 }}>○</span>
-                Live Tail
-              </>
-            )}
-          </button>
-        </div>
-      )}
     </div>
   );
 });
