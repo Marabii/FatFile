@@ -7,10 +7,10 @@ use std::{fs::File, path::Path};
 use crate::Response;
 use crate::services::commands;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FileChangeType {
     Truncated,
-    LinesAdded,
+    LinesAdded { new_lines: Vec<Vec<String>> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -198,19 +198,32 @@ impl FileProcessor {
         Ok(total_offset)
     }
 
-    pub fn refresh_if_needed(&mut self) -> std::io::Result<Option<(FileChangeType, u64, u64)>> {
-        let current_size = std::fs::metadata(&self.file_path)?.len();
+    pub fn refresh_if_needed(&mut self) -> Result<Option<(FileChangeType, u64, u64, Vec<String>)>, String> {
+        let current_size = std::fs::metadata(&self.file_path)
+            .map_err(|e| format!("Failed to get file metadata: {}", e))?
+            .len();
 
         if current_size < self.last_file_size {
             let old_line_count = self.index.len() as u64;
-            self.full_reindex()?;
+            self.full_reindex()
+                .map_err(|e| format!("Failed to reindex file: {}", e))?;
             let new_line_count = self.index.len() as u64;
-            Ok(Some((FileChangeType::Truncated, old_line_count, new_line_count)))
+            // File was truncated, no new lines to return
+            Ok(Some((FileChangeType::Truncated, old_line_count, new_line_count, Vec::new())))
         } else if current_size > self.last_file_size {
             let old_line_count = self.index.len() as u64;
-            self.incremental_index()?;
+            self.incremental_index()
+                .map_err(|e| format!("Failed to incrementally index file: {}", e))?;
             let new_line_count = self.index.len() as u64;
-            Ok(Some((FileChangeType::LinesAdded, old_line_count, new_line_count)))
+
+            // Read the newly added lines
+            let new_lines = if new_line_count > old_line_count {
+                self.read_lines_range(old_line_count, new_line_count - 1)?
+            } else {
+                Vec::new()
+            };
+
+            Ok(Some((FileChangeType::LinesAdded, old_line_count, new_line_count, new_lines)))
         } else {
             Ok(None)
         }

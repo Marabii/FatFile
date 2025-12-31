@@ -128,7 +128,9 @@ export const App: React.FC = () => {
         error: null,
       }));
     } else if ("Chunk" in response) {
-      console.log("[WEBVIEW] Received Chunk response:", response.Chunk);
+      console.log("[WEBVIEW] Received Chunk response:",
+        `lines ${response.Chunk.start_line}-${response.Chunk.end_line}`,
+        `(${response.Chunk.data.length} lines)`);
       setState((prev) => {
         // If we don't have preview lines yet and haven't configured parsing,
         // use this chunk as the preview (taking only first 10 lines)
@@ -178,10 +180,14 @@ export const App: React.FC = () => {
           const evictedChunks = evictLRUChunks(newChunks, MAX_CHUNKS_IN_MEMORY);
 
           console.log(
-            "[WEBVIEW] Chunks in memory:",
+            "[WEBVIEW] Added chunk",
+            response.Chunk.start_line,
+            "- Chunks in memory:",
             evictedChunks.size,
             "/",
-            MAX_CHUNKS_IN_MEMORY
+            MAX_CHUNKS_IN_MEMORY,
+            "- Chunk keys:",
+            Array.from(evictedChunks.keys())
           );
 
           return {
@@ -269,31 +275,30 @@ export const App: React.FC = () => {
       // Clear LRU cache
       chunkAccessTimes.clear();
     } else if ("LinesAdded" in response) {
-      console.log("[WEBVIEW] New lines added:", response.LinesAdded.old_line_count, "->", response.LinesAdded.new_line_count);
+      console.log("[WEBVIEW] New lines added:", response.LinesAdded.old_line_count, "->", response.LinesAdded.new_line_count, `(${response.LinesAdded.new_lines.length} lines)`);
       setState((prev) => {
-        // Clear chunks that might contain the new lines
-        // We need to clear from the old line count onwards
         const CHUNK_SIZE = 100;
-        const oldCount = response.LinesAdded.old_line_count;
         const newChunks = new Map(prev.chunks);
+        const oldCount = response.LinesAdded.old_line_count;
+        const newLines = response.LinesAdded.new_lines;
 
-        // Calculate which chunks might be affected
-        const firstAffectedChunk = Math.floor((oldCount - 1) / CHUNK_SIZE) * CHUNK_SIZE;
+        // Add new lines to appropriate chunks
+        if (newLines.length > 0) {
+          let lineIndex = oldCount;
+          for (const line of newLines) {
+            const chunkStart = Math.floor(lineIndex / CHUNK_SIZE) * CHUNK_SIZE;
 
-        // Remove all chunks from the affected chunk onwards
-        const chunksToRemove: number[] = [];
-        for (const chunkStart of newChunks.keys()) {
-          if (chunkStart >= firstAffectedChunk) {
-            chunksToRemove.push(chunkStart);
+            // Get or create chunk
+            if (!newChunks.has(chunkStart)) {
+              newChunks.set(chunkStart, []);
+            }
+
+            newChunks.get(chunkStart)!.push(line);
+            lineIndex++;
           }
-        }
 
-        for (const chunk of chunksToRemove) {
-          newChunks.delete(chunk);
-          chunkAccessTimes.delete(chunk);
+          console.log("[WEBVIEW] Added new lines to chunks:", Array.from(new Set(newLines.map((_, i) => Math.floor((oldCount + i) / CHUNK_SIZE) * CHUNK_SIZE))));
         }
-
-        console.log("[WEBVIEW] Cleared chunks:", chunksToRemove);
 
         return {
           ...prev,
@@ -357,6 +362,7 @@ export const App: React.FC = () => {
   }, [handleResponse]);
 
   const handleGetChunk = useCallback((startLine: number, endLine: number) => {
+    console.log('[App] Requesting chunk:', startLine, '->', endLine);
     vscode.postMessage({
       type: "getChunk",
       start_line: startLine,
