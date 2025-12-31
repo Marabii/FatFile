@@ -1,33 +1,14 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useMemo } from "react";
 import { LogViewer, type LogViewerRef } from "./components/LogViewer";
 import { SearchBar } from "./components/SearchBar";
 import { LoadingSpinner } from "./components/LoadingSpinner";
 import { ParsingPreviewPanel } from "./components/ParsingPreviewPanel";
-import type {
-  Response,
-  SearchMatch,
-  ExtensionMessage,
-  LogFormat,
-} from "../types";
-
-interface AppState {
-  filePath: string | null;
-  lineCount: number;
-  chunks: Map<number, string[][]>;
-  searchResults: SearchMatch[];
-  searchProgress: number;
-  searchComplete: boolean;
-  isSearching: boolean;
-  isLoading: boolean;
-  error: string | null;
-  encoding: string | null;
-  encodingSupported: boolean;
-  logFormat: LogFormat | null;
-  showParsingConfig: boolean;
-  previewLines: string[][];
-  isParsed: boolean;
-  parsingColumns: number | null;
-}
+import { initialAppState } from "./types/appState";
+import { ChunkManager } from "./services/chunkManager";
+import { useMessageHandler } from "./hooks/useMessageHandler";
+import { useFileInitialization } from "./hooks/useFileInitialization";
+import { useEventHandlers } from "./hooks/useEventHandlers";
+import { useSearchResults } from "./hooks/useSearchResults";
 
 declare const acquireVsCodeApi: () => {
   postMessage: (message: any) => void;
@@ -37,586 +18,42 @@ declare const acquireVsCodeApi: () => {
 
 const vscode = acquireVsCodeApi();
 
-// LRU Cache configuration
-const MAX_CHUNKS_IN_MEMORY = 5;
-
-// Track chunk access times for LRU eviction
-const chunkAccessTimes = new Map<number, number>();
-
-// Evict least recently used chunks to maintain max size
-const evictLRUChunks = (
-  chunks: Map<number, string[][]>,
-  maxSize: number
-): Map<number, string[][]> => {
-  if (chunks.size <= maxSize) {
-    return chunks;
-  }
-
-  // Sort chunks by access time (oldest first)
-  const chunksByAccessTime = Array.from(chunks.keys())
-    .map((key) => ({ key, accessTime: chunkAccessTimes.get(key) || 0 }))
-    .sort((a, b) => a.accessTime - b.accessTime);
-
-  // Keep only the most recent maxSize chunks
-  const chunksToKeep = new Set(
-    chunksByAccessTime.slice(-maxSize).map((item) => item.key)
-  );
-
-  // Create new map with only chunks to keep
-  const newChunks = new Map<number, string[][]>();
-  for (const [key, value] of chunks) {
-    if (chunksToKeep.has(key)) {
-      newChunks.set(key, value);
-    } else {
-      // Remove from access time tracking too
-      chunkAccessTimes.delete(key);
-      console.log("[LRU] Evicted chunk:", key);
-    }
-  }
-
-  return newChunks;
-};
-
-// Mark a chunk as accessed (updates LRU)
-const markChunkAccessed = (chunkStart: number) => {
-  chunkAccessTimes.set(chunkStart, Date.now());
-};
-
 export const App: React.FC = () => {
-  const [state, setState] = useState<AppState>({
-    filePath: null,
-    lineCount: 0,
-    chunks: new Map(),
-    searchResults: [],
-    searchProgress: 0,
-    searchComplete: true,
-    isSearching: false,
-    isLoading: false,
-    error: null,
-    encoding: null,
-    encodingSupported: true,
-    logFormat: null,
-    showParsingConfig: false,
-    previewLines: [],
-    isParsed: false,
-    parsingColumns: null,
+  const [state, setState] = useState(initialAppState);
+  const [highlightedLine, setHighlightedLine] = useState<number | undefined>();
+  const [isLiveTailActive, setIsLiveTailActive] = useState(false);
+  const mainViewerRef = useRef<LogViewerRef>(null);
+
+  // Create chunk manager instance (persists across renders)
+  const chunkManager = useMemo(() => new ChunkManager(), []);
+
+  // Handle responses from backend
+  const handleResponse = useMessageHandler({ chunkManager, setState });
+
+  // Handle file initialization flow
+  useFileInitialization({
+    vscode,
+    state,
+    setState,
+    chunkManager,
+    handleResponse,
   });
 
-  const [showResultsPanel, setShowResultsPanel] = useState(false);
-  const [highlightedLine, setHighlightedLine] = useState<number | undefined>();
-  const mainViewerRef = useRef<LogViewerRef>(null);
-  const [isLiveTailActive, setIsLiveTailActive] = useState(false);
+  // Event handlers
+  const { handleGetChunk, handleSearch, handleApplyParsing, handleSkipParsing } =
+    useEventHandlers({ vscode, setState });
 
-  const handleResponse = useCallback((response: Response) => {
-    console.log("[WEBVIEW] Handling response:", response);
-
-    if ("Encoding" in response) {
-      console.log("[WEBVIEW] Received encoding response:", response.Encoding);
-      setState((prev) => ({
-        ...prev,
-        encoding: response.Encoding.encoding,
-        encodingSupported: response.Encoding.is_supported,
-      }));
-    } else if ("FileOpened" in response) {
-      console.log(
-        "[WEBVIEW] Received FileOpened response:",
-        response.FileOpened
-      );
-      setState((prev) => ({
-        ...prev,
-        lineCount: response.FileOpened.line_count,
-        error: null,
-      }));
-    } else if ("Chunk" in response) {
-      console.log("[WEBVIEW] Received Chunk response:",
-        `lines ${response.Chunk.start_line}-${response.Chunk.end_line}`,
-        `(${response.Chunk.data.length} lines)`);
-      setState((prev) => {
-        // If we don't have preview lines yet and haven't configured parsing,
-        // use this chunk as the preview (taking only first 10 lines)
-        const needsPreview =
-          prev.previewLines.length === 0 &&
-          !prev.showParsingConfig &&
-          !prev.isParsed;
-        console.log("[WEBVIEW] Needs preview?", needsPreview, {
-          previewLinesLength: prev.previewLines.length,
-          showParsingConfig: prev.showParsingConfig,
-          isParsed: prev.isParsed,
-        });
-
-        if (needsPreview) {
-          console.log(
-            "[WEBVIEW] Storing as preview chunk, taking first 10 lines from",
-            response.Chunk.data.length,
-            "lines"
-          );
-          return {
-            ...prev,
-            previewLines: response.Chunk.data.slice(0, 10),
-          };
-        } else {
-          // Regular chunk for viewing
-          console.log(
-            "[WEBVIEW] Storing regular chunk at line",
-            response.Chunk.start_line,
-            "with",
-            response.Chunk.data.length,
-            "lines"
-          );
-          console.log("[WEBVIEW] First line of chunk:", response.Chunk.data[0]);
-          console.log(
-            "[WEBVIEW] isParsed=",
-            prev.isParsed,
-            "parsingColumns=",
-            prev.parsingColumns
-          );
-
-          // Add new chunk and mark it as accessed
-          const newChunks = new Map(prev.chunks);
-          newChunks.set(response.Chunk.start_line, response.Chunk.data);
-          markChunkAccessed(response.Chunk.start_line);
-
-          // Apply LRU eviction to keep only MAX_CHUNKS_IN_MEMORY chunks
-          const evictedChunks = evictLRUChunks(newChunks, MAX_CHUNKS_IN_MEMORY);
-
-          console.log(
-            "[WEBVIEW] Added chunk",
-            response.Chunk.start_line,
-            "- Chunks in memory:",
-            evictedChunks.size,
-            "/",
-            MAX_CHUNKS_IN_MEMORY,
-            "- Chunk keys:",
-            Array.from(evictedChunks.keys())
-          );
-
-          return {
-            ...prev,
-            chunks: evictedChunks,
-            isLoading: false,
-          };
-        }
-      });
-    } else if ("ParsingInformation" in response) {
-      console.log(
-        "[WEBVIEW] Received ParsingInformation response:",
-        response.ParsingInformation
-      );
-      setState((prev) => {
-        // If we have parsingColumns set, this is a confirmation after applying parsing
-        if (prev.parsingColumns !== null) {
-          console.log(
-            "[WEBVIEW] Parsing confirmed, clearing chunks and setting isParsed=true"
-          );
-
-          // Clear LRU cache when reloading for parsing
-          chunkAccessTimes.clear();
-          console.log("[LRU] Cleared chunk access times for parsing");
-
-          return {
-            ...prev,
-            logFormat: response.ParsingInformation.log_format,
-            isParsed: true,
-            showParsingConfig: false,
-            isLoading: false,
-            chunks: new Map(), // Clear chunks NOW so they reload as parsed
-            // Keep previewLines - no longer needed but clearing it triggers unwanted requests
-          };
-        }
-        // If we haven't shown the config yet, show it now (initial detection)
-        else if (!prev.showParsingConfig && !prev.isParsed) {
-          console.log("[WEBVIEW] Showing parsing config panel!");
-          return {
-            ...prev,
-            logFormat: response.ParsingInformation.log_format,
-            showParsingConfig: true,
-            isLoading: false,
-          };
-        }
-        // Otherwise just update the format
-        else {
-          console.log("[WEBVIEW] Updating log format");
-          return {
-            ...prev,
-            logFormat: response.ParsingInformation.log_format,
-            isLoading: false,
-          };
-        }
-      });
-    } else if ("SearchResults" in response) {
-      setState((prev) => ({
-        ...prev,
-        searchResults: response.SearchResults.matches,
-        searchComplete: response.SearchResults.search_complete,
-        isSearching: false,
-        searchProgress: 100,
-      }));
-    } else if ("Progress" in response) {
-      setState((prev) => ({
-        ...prev,
-        searchProgress: response.Progress.percent,
-      }));
-    } else if ("Error" in response) {
-      setState((prev) => ({
-        ...prev,
-        error: response.Error.message,
-        isLoading: false,
-        isSearching: false,
-      }));
-    } else if ("Info" in response) {
-      console.log("[WEBVIEW] Backend info:", response.Info.message);
-    } else if ("FileTruncated" in response) {
-      console.log("[WEBVIEW] File was truncated, new line count:", response.FileTruncated.line_count);
-      setState((prev) => ({
-        ...prev,
-        lineCount: response.FileTruncated.line_count,
-        chunks: new Map(), // Clear chunks as file was truncated
-      }));
-      // Clear LRU cache
-      chunkAccessTimes.clear();
-    } else if ("LinesAdded" in response) {
-      console.log("[WEBVIEW] New lines added:", response.LinesAdded.old_line_count, "->", response.LinesAdded.new_line_count, `(${response.LinesAdded.new_lines.length} lines)`);
-      setState((prev) => {
-        const CHUNK_SIZE = 100;
-        const newChunks = new Map(prev.chunks);
-        const oldCount = response.LinesAdded.old_line_count;
-        const newLines = response.LinesAdded.new_lines;
-
-        // Add new lines to appropriate chunks
-        if (newLines.length > 0) {
-          let lineIndex = oldCount;
-          for (const line of newLines) {
-            const chunkStart = Math.floor(lineIndex / CHUNK_SIZE) * CHUNK_SIZE;
-
-            // Get or create chunk
-            if (!newChunks.has(chunkStart)) {
-              newChunks.set(chunkStart, []);
-            }
-
-            newChunks.get(chunkStart)!.push(line);
-            lineIndex++;
-          }
-
-          console.log("[WEBVIEW] Added new lines to chunks:", Array.from(new Set(newLines.map((_, i) => Math.floor((oldCount + i) / CHUNK_SIZE) * CHUNK_SIZE))));
-        }
-
-        return {
-          ...prev,
-          lineCount: response.LinesAdded.new_line_count,
-          chunks: newChunks,
-        };
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    const messageHandler = (event: MessageEvent) => {
-      const message = event.data as ExtensionMessage;
-      console.log("[WEBVIEW] <<<< Received message from extension:", message);
-
-      if (message.type === "init") {
-        const filePath = message.filePath;
-        console.log("[WEBVIEW] Initializing with file:", filePath);
-
-        // Clear LRU cache when opening a new file
-        chunkAccessTimes.clear();
-        console.log("[LRU] Cleared chunk access times for new file");
-
-        setState((prev) => ({
-          ...prev,
-          filePath,
-          isLoading: true,
-        }));
-
-        // Start the initialization flow: GetFileEncoding -> OpenFile -> GetChunk -> GetParsingInformation
-        console.log("[WEBVIEW] >>>> Sending GetFileEncoding command:", {
-          path: filePath,
-        });
-        vscode.postMessage({
-          type: "getFileEncoding",
-          path: filePath,
-        });
-      } else if (message.type === "response") {
-        console.log(
-          "[WEBVIEW] Got response message, calling handleResponse with:",
-          message.data
-        );
-        handleResponse(message.data);
-      } else if (message.type === "error") {
-        console.log("[WEBVIEW] Got error message:", message.message);
-        setState((prev) => ({
-          ...prev,
-          error: message.message,
-          isLoading: false,
-          isSearching: false,
-        }));
-      }
-    };
-
-    console.log("[WEBVIEW] Setting up message listener");
-    window.addEventListener("message", messageHandler);
-    return () => {
-      console.log("[WEBVIEW] Removing message listener");
-      window.removeEventListener("message", messageHandler);
-    };
-  }, [handleResponse]);
-
-  const handleGetChunk = useCallback((startLine: number, endLine: number) => {
-    console.log('[App] Requesting chunk:', startLine, '->', endLine);
-    vscode.postMessage({
-      type: "getChunk",
-      start_line: startLine,
-      end_line: endLine,
-    });
-  }, []);
-
-  const handleSearch = useCallback((pattern: string) => {
-    setState((prev) => ({
-      ...prev,
-      isSearching: true,
-      searchProgress: 0,
-      searchResults: [],
-    }));
-
-    vscode.postMessage({
-      type: "search",
-      pattern,
-    });
-  }, []);
-
-  const handleApplyParsing = useCallback(
-    (logFormat: LogFormat, pattern?: string, nbrColumns?: number) => {
-      console.log(
-        "[WEBVIEW] Applying parsing with format:",
-        logFormat,
-        "pattern:",
-        pattern,
-        "columns:",
-        nbrColumns
-      );
-
-      // Determine the number of columns for this format
-      const columns =
-        nbrColumns ||
-        (logFormat !== "Other"
-          ? logFormat === "CommonEventFormat" ||
-            logFormat === "SyslogRFC5424" ||
-            logFormat === "CommonLogFormat"
-            ? 8
-            : 5
-          : 0);
-
-      setState((prev) => ({
-        ...prev,
-        isLoading: true,
-        showParsingConfig: false, // Hide modal immediately
-        parsingColumns: columns, // Store the number of columns
-      }));
-
-      vscode.postMessage({
-        type: "parseFile",
-        log_format: logFormat,
-        pattern,
-        nbr_columns: nbrColumns,
-      });
-    },
-    []
-  );
-
-  const handleSkipParsing = useCallback(() => {
-    console.log("Skipping parsing");
-
-    setState((prev) => ({
-      ...prev,
-      showParsingConfig: false,
-      isParsed: false,
-      isLoading: false,
-    }));
-  }, []);
-
-  // After receiving encoding, open the file
-  useEffect(() => {
-    console.log(
-      "[WEBVIEW] useEffect[encoding]: encoding=",
-      state.encoding,
-      "filePath=",
-      state.filePath
-    );
-    if (state.encoding && state.filePath) {
-      console.log(
-        "[WEBVIEW] >>>> Encoding received, opening file:",
-        state.filePath
-      );
-      vscode.postMessage({
-        type: "openFile",
-        path: state.filePath,
-      });
-    }
-  }, [state.encoding, state.filePath]);
-
-  // After file is opened, get first 10 lines for preview
-  useEffect(() => {
-    console.log(
-      "[WEBVIEW] useEffect[lineCount]: lineCount=",
-      state.lineCount,
-      "previewLines.length=",
-      state.previewLines.length,
-      "parsingColumns=",
-      state.parsingColumns
-    );
-    // Only request preview if we haven't started parsing yet
-    if (
-      state.lineCount > 0 &&
-      state.previewLines.length === 0 &&
-      state.parsingColumns === null
-    ) {
-      console.log("[WEBVIEW] >>>> File opened, getting preview chunk");
-      vscode.postMessage({
-        type: "getChunk",
-        start_line: 0,
-        end_line: 10,
-      });
-    }
-  }, [state.lineCount, state.previewLines.length, state.parsingColumns]);
-
-  // After preview lines are received, get parsing information
-  useEffect(() => {
-    console.log(
-      "[WEBVIEW] useEffect[previewLines]: previewLines.length=",
-      state.previewLines.length,
-      "logFormat=",
-      state.logFormat,
-      "showParsingConfig=",
-      state.showParsingConfig
-    );
-    if (
-      state.previewLines.length > 0 &&
-      !state.logFormat &&
-      !state.showParsingConfig
-    ) {
-      console.log(
-        "[WEBVIEW] >>>> Preview lines received, getting parsing information"
-      );
-      vscode.postMessage({
-        type: "getParsingInformation",
-      });
-    }
-  }, [state.previewLines.length, state.logFormat, state.showParsingConfig]);
-
-  // Show encoding warning when encoding is not supported
-  useEffect(() => {
-    if (state.encoding && !state.encodingSupported) {
-      // Send a message to the extension to show a VSCode warning
-      vscode.postMessage({
-        type: "showEncodingWarning",
-        encoding: state.encoding,
-      });
-    }
-  }, [state.encoding, state.encodingSupported]);
-
-  // Show results panel when search completes with results
-  useEffect(() => {
-    if (state.searchResults.length > 0 && !state.isSearching) {
-      setShowResultsPanel(true);
-    }
-  }, [state.searchResults.length, state.isSearching]);
-
-  // Build filtered chunks containing only search result lines, re-indexed from 0
-  const [searchResultData, setSearchResultData] = useState<{
-    chunks: Map<number, string[][]>;
-    lineCount: number;
-    lineMapping: Map<number, number>; // virtual index -> actual line number
-  }>({ chunks: new Map(), lineCount: 0, lineMapping: new Map() });
-
-  useEffect(() => {
-    if (state.searchResults.length === 0) {
-      setSearchResultData({
-        chunks: new Map(),
-        lineCount: 0,
-        lineMapping: new Map(),
-      });
-      return;
-    }
-
-    const CHUNK_SIZE = 100;
-    const filteredChunks = new Map<number, string[][]>();
-    const lineMapping = new Map<number, number>();
-
-    // Sort results by line number
-    const sortedResults = [...state.searchResults].sort(
-      (a, b) => a.line_number - b.line_number
-    );
-
-    // First, identify which chunks we need and request missing ones
-    const neededChunks = new Set<number>();
-    for (const result of sortedResults) {
-      const chunkStart =
-        Math.floor(result.line_number / CHUNK_SIZE) * CHUNK_SIZE;
-      neededChunks.add(chunkStart);
-    }
-
-    // Request any missing chunks
-    const missingChunks: number[] = [];
-    for (const chunkStart of neededChunks) {
-      if (!state.chunks.has(chunkStart)) {
-        missingChunks.push(chunkStart);
-      }
-    }
-
-    // If there are missing chunks, request them
-    if (missingChunks.length > 0) {
-      console.log(
-        "[App] Requesting missing chunks for search results:",
-        missingChunks
-      );
-      for (const chunkStart of missingChunks) {
-        const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, state.lineCount);
-        handleGetChunk(chunkStart, chunkEnd);
-      }
-      // Don't build search result data yet - wait for chunks to load
-      return;
-    }
-
-    let virtualIndex = 0;
-
-    // Build chunks with re-indexed lines
-    for (const result of sortedResults) {
-      const originalLineNumber = result.line_number;
-      const originalChunkStart =
-        Math.floor(originalLineNumber / CHUNK_SIZE) * CHUNK_SIZE;
-      const originalChunk = state.chunks.get(originalChunkStart);
-
-      if (originalChunk) {
-        const lineIndexInChunk = originalLineNumber - originalChunkStart;
-        const lineData = originalChunk[lineIndexInChunk];
-
-        if (lineData) {
-          // Map virtual index to actual line number
-          lineMapping.set(virtualIndex, originalLineNumber);
-
-          // Add to virtual chunk
-          const virtualChunkStart =
-            Math.floor(virtualIndex / CHUNK_SIZE) * CHUNK_SIZE;
-          if (!filteredChunks.has(virtualChunkStart)) {
-            filteredChunks.set(virtualChunkStart, []);
-          }
-          filteredChunks.get(virtualChunkStart)!.push(lineData);
-
-          virtualIndex++;
-        }
-      }
-    }
-
-    console.log("[App] Built search result data:", {
-      lineCount: sortedResults.length,
-      chunks: filteredChunks.size,
-    });
-    setSearchResultData({
-      chunks: filteredChunks,
-      lineCount: sortedResults.length,
-      lineMapping,
-    });
-  }, [state.searchResults, state.chunks, handleGetChunk, state.lineCount]);
+  // Search results processing
+  const {
+    showResultsPanel,
+    searchResultData,
+    handleCloseResults,
+    handleSearchChunkRequest,
+  } = useSearchResults({
+    state,
+    setState,
+    onGetChunk: handleGetChunk,
+  });
 
   // Handler to navigate from results panel to main view
   const handleResultLineClick = useCallback(
@@ -635,17 +72,26 @@ export const App: React.FC = () => {
     [searchResultData.lineMapping]
   );
 
-  // Handler to close results panel
-  const handleCloseResults = useCallback(() => {
-    setShowResultsPanel(false);
-    setHighlightedLine(undefined);
-  }, []);
+  // Wrap handleCloseResults to also reset highlighting
+  const handleCloseResultsWithReset = useCallback(() => {
+    handleCloseResults();
+    setHighlightedLine(undefined); // Reset highlighting
+  }, [handleCloseResults]);
 
   // Toggle Live Tail mode
   const handleToggleLiveTail = useCallback(() => {
-    setIsLiveTailActive(prev => !prev);
+    setIsLiveTailActive((prev) => !prev);
   }, []);
 
+  // Mark chunk as accessed (for LRU tracking)
+  const handleChunkAccessed = useCallback(
+    (chunkStart: number) => {
+      chunkManager.markAccessed(state.chunks, chunkStart);
+    },
+    [chunkManager, state.chunks]
+  );
+
+  // Loading state
   if (state.isLoading && state.lineCount === 0) {
     return (
       <div className="flex items-center justify-center w-full h-full">
@@ -654,6 +100,7 @@ export const App: React.FC = () => {
     );
   }
 
+  // Error state
   if (state.error) {
     return (
       <div className="flex items-center justify-center w-full h-full">
@@ -665,6 +112,7 @@ export const App: React.FC = () => {
     );
   }
 
+  // Initialization state
   if (!state.filePath) {
     return (
       <div className="flex items-center justify-center w-full h-full">
@@ -703,7 +151,7 @@ export const App: React.FC = () => {
                 : undefined
             }
             highlightedLine={highlightedLine}
-            onChunkAccessed={markChunkAccessed}
+            onChunkAccessed={handleChunkAccessed}
             isLiveTailActive={isLiveTailActive}
           />
         </div>
@@ -718,7 +166,7 @@ export const App: React.FC = () => {
               lineCount={searchResultData.lineCount}
               chunks={searchResultData.chunks}
               searchResults={state.searchResults}
-              onGetChunk={() => {}} // No chunk loading needed for results
+              onGetChunk={handleSearchChunkRequest} // Lazy load search result lines
               nbrColumns={
                 state.isParsed && state.parsingColumns
                   ? state.parsingColumns
@@ -726,41 +174,48 @@ export const App: React.FC = () => {
               }
               onLineClick={handleResultLineClick}
               showHeader={true}
-              onClose={handleCloseResults}
+              onClose={handleCloseResultsWithReset}
               title={`Search Results (${state.searchResults.length} matches)`}
-              onChunkAccessed={markChunkAccessed}
+              onChunkAccessed={handleChunkAccessed}
             />
           </div>
         )}
       </div>
 
       {/* Bottom toolbar with Live Tail and Search bar */}
-      <div className="flex items-center gap-3 border-t" style={{
-        borderColor: 'var(--vscode-panel-border)',
-        backgroundColor: 'var(--vscode-statusBar-background)',
-        paddingLeft: '16px'
-      }}>
+      <div
+        className="flex items-center gap-3 border-t"
+        style={{
+          borderColor: "var(--vscode-panel-border)",
+          backgroundColor: "var(--vscode-statusBar-background)",
+          paddingLeft: "16px",
+        }}
+      >
         {/* Live Tail button */}
         <button
           onClick={handleToggleLiveTail}
           className="px-3 py-1 text-xs rounded transition-all flex items-center gap-2"
           style={{
             backgroundColor: isLiveTailActive
-              ? 'var(--vscode-button-background)'
-              : 'var(--vscode-button-secondaryBackground)',
+              ? "var(--vscode-button-background)"
+              : "var(--vscode-button-secondaryBackground)",
             color: isLiveTailActive
-              ? 'var(--vscode-button-foreground)'
-              : 'var(--vscode-button-secondaryForeground)',
+              ? "var(--vscode-button-foreground)"
+              : "var(--vscode-button-secondaryForeground)",
             border: isLiveTailActive
-              ? '1px solid var(--vscode-button-border)'
-              : '1px solid var(--vscode-button-border)',
-            fontWeight: isLiveTailActive ? 600 : 400
+              ? "1px solid var(--vscode-button-border)"
+              : "1px solid var(--vscode-button-border)",
+            fontWeight: isLiveTailActive ? 600 : 400,
           }}
-          title={isLiveTailActive ? 'Disable Live Tail mode' : 'Enable Live Tail mode - automatically scroll to new lines'}
+          title={
+            isLiveTailActive
+              ? "Disable Live Tail mode"
+              : "Enable Live Tail mode - automatically scroll to new lines"
+          }
         >
           {isLiveTailActive ? (
             <>
-              <span style={{ color: '#4EC9B0' }}>●</span>
+              <span style={{ color: "#4EC9B0" }}>●</span>
               Live Tail
             </>
           ) : (
