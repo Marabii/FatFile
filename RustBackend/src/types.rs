@@ -85,6 +85,7 @@ pub enum Response {
     LinesAdded {
         old_line_count: u64,
         new_line_count: u64,
+        new_lines: Vec<Vec<String>>,
     },
 }
 

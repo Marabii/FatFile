@@ -393,36 +393,19 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(({
     }
   }, [lineCount, needsWindowing]);
 
-  // When lineCount increases and live tail is active, fetch new chunks and scroll to end
+  // When lineCount increases and live tail is active, scroll to end
   useEffect(() => {
     if (isLiveTailActive && lineCount > previousLineCount.current) {
-      const oldCount = previousLineCount.current;
-      const newCount = lineCount;
+      console.log('[LiveTail] New lines detected:', previousLineCount.current, '->', lineCount);
 
-      console.log('[LiveTail] New lines detected:', oldCount, '->', newCount);
-
-      // Fetch the new lines
-      const startLine = oldCount;
-      const endLine = newCount;
-      const chunkStart = Math.floor(startLine / CHUNK_SIZE) * CHUNK_SIZE;
-      const chunkEnd = Math.min(Math.ceil(endLine / CHUNK_SIZE) * CHUNK_SIZE, newCount);
-
-      // Request any missing chunks
-      for (let chunk = chunkStart; chunk < chunkEnd; chunk += CHUNK_SIZE) {
-        if (!chunks.has(chunk)) {
-          const actualChunkEnd = Math.min(chunk + CHUNK_SIZE, lineCount);
-          onGetChunk(chunk, actualChunkEnd);
-        }
-      }
-
-      // Scroll to end
+      // Scroll to end (new lines are already in chunks from LinesAdded event)
       setTimeout(() => {
         scrollToEnd();
       }, 100);
     }
 
     previousLineCount.current = lineCount;
-  }, [lineCount, isLiveTailActive, chunks, onGetChunk, scrollToEnd]);
+  }, [lineCount, isLiveTailActive, scrollToEnd]);
 
   // When live tail is activated, scroll to end
   useEffect(() => {

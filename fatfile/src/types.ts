@@ -130,6 +130,7 @@ export interface LinesAddedResponse {
   LinesAdded: {
     old_line_count: number;
     new_line_count: number;
+    new_lines: string[][];
   };
 }
 

@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    services::{FileProcessor, FileState, file_processor::FileChangeType},
+    services::{FileProcessor, FileState, file_processor::FileChangeType, commands::utils},
     types::Response,
 };
 
@@ -52,16 +52,28 @@ pub fn open_file(
 
             let mut file_state_guard = cloned_file_state.lock().unwrap();
             if let Some(ref mut fp) = *file_state_guard
-                && let Ok(Some((change_type, old_count, new_count))) = fp.processor.refresh_if_needed()
+                && let Ok(Some((change_type, old_count, new_count, new_lines))) = fp.processor.refresh_if_needed()
             {
                 let response = match change_type {
                     FileChangeType::Truncated => Response::FileTruncated {
                         line_count: new_count,
                     },
-                    FileChangeType::LinesAdded => Response::LinesAdded {
-                        old_line_count: old_count,
-                        new_line_count: new_count,
-                    },
+                    FileChangeType::LinesAdded => {
+                        // Parse the new lines using the same logic as GetChunk
+                        let parsed_lines = utils::parse_data(
+                            &fp.regex_pattern,
+                            fp.nbr_columns,
+                            &new_lines,
+                            old_count,
+                            false, // Don't show parsing errors for live tail
+                        );
+
+                        Response::LinesAdded {
+                            old_line_count: old_count,
+                            new_line_count: new_count,
+                            new_lines: parsed_lines,
+                        }
+                    }
                 };
                 println!("{}", serde_json::to_string(&response).unwrap());
                       }
