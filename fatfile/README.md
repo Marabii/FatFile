@@ -1,6 +1,6 @@
 # FatFile - Lightning-Fast Log Viewer for VSCode
 
-![Basic Functionality](images/Basic_Functionality.gif)
+[![FatFile Demo](https://img.youtube.com/vi/0UAOC2mh1PU/maxresdefault.jpg)](https://www.youtube.com/watch?v=0UAOC2mh1PU)
 
 **Handle massive log files with ease.** FatFile is a high-performance VSCode extension built with a powerful Rust backend that lets you instantly open, search, and navigate log files with **millions of lines** without breaking a sweat.
 
