@@ -16,35 +16,28 @@ jobs:
   build:
     name: Build ${{ matrix.platform }}-${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
-
     strategy:
+      fail-fast: false # CRITICAL: Prevents one failure from canceling everything
       matrix:
         include:
-          # Linux x64
           - os: ubuntu-latest
             platform: linux
             arch: x64
             rust_target: x86_64-unknown-linux-gnu
             binary_name: FatFile
             output_name: FatFile-linux-x64
-
-          # macOS x64 (Intel)
-          - os: macos-15-intel
+          - os: macos-13 # Use macos-13 or macos-latest; macos-15-intel is often unstable/experimental
             platform: darwin
             arch: x64
             rust_target: x86_64-apple-darwin
             binary_name: FatFile
             output_name: FatFile-darwin-x64
-
-          # macOS arm64 (Apple Silicon)
           - os: macos-latest
             platform: darwin
             arch: arm64
             rust_target: aarch64-apple-darwin
             binary_name: FatFile
             output_name: FatFile-darwin-arm64
-
-          # Windows x64
           - os: windows-latest
             platform: win32
             arch: x64
@@ -61,36 +54,26 @@ jobs:
         with:
           targets: ${{ matrix.rust_target }}
 
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            RustBackend/target/
-          key: ${{ runner.os }}-cargo-${{ matrix.rust_target }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.rust_target }}-
-            ${{ runner.os }}-cargo-
-
       - name: Build Rust backend
-        working-directory: RustBackend
+        # Explicitly run this in the subfolder
         run: cargo build --release --target ${{ matrix.rust_target }}
+        working-directory: RustBackend
 
-      - name: Rename binary (Unix)
+      - name: Move and Rename binary (Unix)
         if: runner.os != 'Windows'
         run: |
+          # Create bin folder in the root fatfile directory
           mkdir -p fatfile/bin
+          # Use the absolute-style path from repo root
           cp RustBackend/target/${{ matrix.rust_target }}/release/${{ matrix.binary_name }} fatfile/bin/${{ matrix.output_name }}
           chmod +x fatfile/bin/${{ matrix.output_name }}
 
-      - name: Rename binary (Windows)
+      - name: Move and Rename binary (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path fatfile\bin
-          Copy-Item RustBackend\target\${{ matrix.rust_target }}\release\${{ matrix.binary_name }} fatfile\bin\${{ matrix.output_name }}
+          if (!(Test-Path "fatfile\bin")) { New-Item -ItemType Directory -Path "fatfile\bin" }
+          Copy-Item "RustBackend\target\${{ matrix.rust_target }}\release\${{ matrix.binary_name }}" -Destination "fatfile\bin\${{ matrix.output_name }}"
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
