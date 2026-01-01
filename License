@@ -1,0 +1,28 @@
+FATFILE NON-COMMERCIAL LICENSE (Version 1.0.0)
+
+1. DEFINITIONS
+
+"Software" means the FatFile VS Code extension code, the compiled Rust binaries, and any associated documentation provided in this repository.
+
+"User" means the person or entity exercising the rights granted under this license.
+
+"Non-Commercial Purpose" means any use that is not for a Commercial Purpose.
+
+"Commercial Purpose" means any use for financial gain or commercial advantage. This includes, but is not limited to:
+Selling, renting, or leasing the Software for a fee.
+
+2. GRANT OF LICENSE Subject to the terms and conditions of this license, the author of the Software hereby grants you a worldwide, royalty-free, non-exclusive license to:
+
+Install and use the Software for a Non-Commercial Purpose.
+
+Reproduce and distribute copies of the Software for a Non-Commercial Purpose, provided that this LICENSE file is included in all copies.
+
+3. RESERVATION OF RIGHTS The author reserves all rights not expressly granted in this license. This includes, but is not limited to, the exclusive right to use, reproduce, modify, and distribute the Software for Commercial Purposes.
+
+If you wish to use this Software for a Commercial Purpose (e.g., within your company), you must obtain a separate written commercial license from the author.
+
+4. MODIFICATIONS You may modify the Software for your own personal, non-commercial use. However, you may not distribute modified versions of the Software (derivatives) without the express written permission of the author.
+
+5. NO WARRANTY THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+6. COPYRIGHT Copyright (c) 2026 Hamza DADDA. All rights reserved.

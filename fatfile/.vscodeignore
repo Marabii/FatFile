@@ -1,14 +1,31 @@
-.vscode/**
-.vscode-test/**
-out/**
-node_modules/**
-src/**
+# Development / Config
+.github/
+RustBackend/
+.vscode/
+.vscode-test/
 .gitignore
 .yarnrc
-webpack.config.js
 vsc-extension-quickstart.md
-**/tsconfig.json
-**/eslint.config.mjs
-**/*.map
+webpack.config.js
+tsconfig.json
+eslint.config.mjs
+tailwind.config.js
+postcss.config.js
+webview.js
+.vscode-test.mjs
+bin/README.md
+
+# Source Code (VS Code compiles this into /dist)
+src/
 **/*.ts
-**/.vscode-test.*
+**/*.tsx
+**/*.map
+
+# Build Artifacts to IGNORE
+node_modules/
+out/
+
+# --- CRITICAL: THE RUST BINARIES ---
+# Ensure the bin folder is ALWAYS included
+!bin/
+!bin/*

@@ -1,16 +1,36 @@
 {
   "name": "fatfile",
-  "displayName": "FatFile",
-  "description": "a vscode extension that allows the user to view large logs without consuming too much ram. Built with a rust backend.",
-  "version": "0.0.1",
+  "displayName": "FatFile: Ultra-Fast Large Log Viewer",
+  "description": "Open 10GB+ logs instantly with O(1) random access. High-performance streaming powered by a Rust backend.",
+  "version": "0.1.0",
+  "publisher": "marabii",
+  "author": {
+    "name": "Hamza DADDA"
+  },
+  "license": "See License In License",
+  "icon": "../icon.jpg",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Marabii/FatFile"
+  },
   "engines": {
     "vscode": "^1.107.0"
   },
+  "keywords": [
+    "logs",
+    "viewer",
+    "performance",
+    "rust",
+    "streaming",
+    "large files",
+    "tail"
+  ],
   "extensionKind": [
     "workspace",
     "ui"
   ],
   "categories": [
+    "Visualization",
     "Other"
   ],
   "activationEvents": [],
