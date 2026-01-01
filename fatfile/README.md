@@ -1,141 +1,141 @@
-# FatFile Viewer
+# FatFile - Lightning-Fast Log Viewer for VSCode
 
-A high-performance VS Code extension for viewing and searching large log files (100MB+) without consuming excessive RAM. Built with a Rust backend for blazing-fast performance and a React frontend with TailwindCSS for a professional, modern UI.
+![Basic Functionality](images/Basic_Functionality.gif)
+
+**Handle massive log files with ease.** FatFile is a high-performance VSCode extension built with a powerful Rust backend that lets you instantly open, search, and navigate log files with **millions of lines** without breaking a sweat.
+
+No more crashes. No more freezing. No more waiting. Just instant access to your logs, no matter how large.
+
+## Why FatFile?
+
+Traditional text editors choke on large log files. Even VSCode's default editor struggles with files larger than a few MB. FatFile changes everything:
+
+- **Instant Loading** - Open 10+ million line files in seconds
+- **Blazing Fast Search** - Find needles in haystacks with regex-powered search
+- **Intelligent Parsing** - Automatically detects and parses common log formats
+- **Live Tail** - Monitor logs in real-time as they grow
+- **Smart Memory Management** - Uses minimal RAM regardless of file size
+- **Split-Screen Search** - View search results alongside the full log
+
+Whether you're debugging production issues, analyzing server logs, or investigating security incidents, FatFile is your go-to tool for working with large text files.
+
+## Getting Started
+
+Using FatFile is incredibly simple:
+
+1. **Install the extension** from the VSCode marketplace
+2. **Right-click** on any `.log` or `.txt` file in your workspace
+3. Select **"Open With..."** from the context menu
+4. Choose **"FatFile Viewer"**
+5. That's it! Your file is now open and ready to explore
 
 ## Features
 
-- **High Performance**: View files with millions of lines without loading the entire file into memory
-- **Virtual Scrolling**: Smooth scrolling through large files using react-window
-- **Powerful Search**: Regex-based search with real-time progress indicators
-- **Syntax Highlighting**: Automatic column-based syntax highlighting for structured logs
-- **File Watching**: Automatically detects and re-indexes when files change
-- **Beautiful UI**: Modern, professional interface that matches VS Code's theme
+### Automatic Format Detection
 
-## Prerequisites
+FatFile automatically detects popular log formats including Apache, Nginx, Common Log Format, and more. Your logs are instantly parsed into clean, readable columns.
 
-Before using the extension, you need to compile the Rust backend:
+![Custom Parser](images/Custom%20Parser.png)
 
-```bash
-cd ../RustBackend
-cargo build --release
-```
+### Custom Parsing Rules
 
-The extension will automatically find the binary in one of these locations:
-- `../RustBackend/target/release/FatFile`
-- `../RustBackend/target/debug/FatFile`
-- `../target/release/FatFile`
-- `../target/debug/FatFile`
+Need to parse a custom log format? No problem. FatFile lets you define your own regex patterns with capture groups to extract exactly the data you need.
 
-## Installation
+- Define custom regex patterns
+- Specify the number of columns
+- Preview parsing results before applying
+- Save patterns for reuse
 
-1. Install dependencies:
-```bash
-npm install
-```
+### Powerful Search with Split-Screen Results
 
-2. Build the extension:
-```bash
-npm run compile
-```
+Search through millions of lines instantly with regex support. Results appear in a dedicated panel below the main viewer, making it easy to jump between matches without losing context.
 
-## Development
+![Split-Screen Search](images/Split-screen-search.png)
 
-Run the extension in development mode:
+**Search Features:**
+- Lightning-fast regex search across the entire file
+- Split-screen results panel
+- Jump to any match with a single click
+- Search result highlighting
+- Match count display
+- Navigate through matches with ease
 
-```bash
-npm run watch
-```
+### Live Tail Mode
 
-Then press F5 in VS Code to launch the Extension Development Host.
+Monitor log files in real-time as new lines are written. Perfect for watching application logs, server logs, or any file that's actively being updated.
 
-## Usage
+![Live Tail](images/LiveTail.png)
 
-### Opening Files
+### Intelligent Navigation
 
-The extension registers as a custom editor for `.log` and `.txt` files. You have two options:
+- **Go to Line** - Jump directly to any line number
+- **Virtual Scrolling** - Smooth navigation through millions of lines
+- **Column Resizing** - Adjust column widths to fit your data
+- **Keyboard Shortcuts** - Navigate efficiently without leaving the keyboard
 
-1. **Right-click a log/txt file** → Select "Open With" → Choose "FatFile Viewer"
-2. **Use the command palette** (Ctrl+Shift+P) → Type "Open with FatFile Viewer"
+## Technical Excellence
 
-### Search
+### Rust-Powered Backend
 
-1. Enter a regex pattern in the search bar (e.g., `error|warning`, `\d{3}`)
-2. Click "Search" or press Enter
-3. Watch the progress bar as the search runs
-4. Results are highlighted and the view automatically scrolls to the first match
+FatFile uses a high-performance Rust backend that handles all file operations with minimal memory overhead. The backend processes files line-by-line, ensuring you can work with multi-gigabyte files without consuming all your RAM.
 
-### Column-Based Syntax Highlighting
+### Smart Caching
 
-For Apache/Nginx access logs (and similar structured formats), the extension automatically applies syntax highlighting to parsed columns:
+Only the visible portions of your file are loaded into memory. As you scroll or search, FatFile intelligently caches the data you need while evicting what you don't, keeping memory usage consistently low.
 
-Default pattern for `.log` files:
-```regex
-(\d{1,3}(?:\.\d{1,3}){3}) - - \[(.*?)\] "(.*?)" (\d{3}) (\d+|-)
-```
+### Cross-Platform Support
 
-This highlights:
-- IP addresses (cyan)
-- Timestamps (orange)
-- HTTP requests (yellow)
-- Status codes (blue)
-- Response sizes (purple)
+FatFile works seamlessly on:
+- Windows (x64)
+- macOS (Intel and Apple Silicon)
+- Linux (x64)
 
-## Architecture
+Platform-specific binaries are automatically selected for optimal performance.
 
-### Backend (Rust)
-- Fast file indexing using memchr
-- Parallel search with rayon
-- Efficient chunked reading
-- File watching capabilities
+## Use Cases
 
-### Frontend (React + TypeScript + TailwindCSS)
-- Virtual scrolling for millions of lines
-- Real-time search progress
-- Syntax highlighting
-- VS Code theme integration
+- **DevOps Engineers** - Analyze server logs and application logs from production
+- **Security Analysts** - Investigate security logs and audit trails
+- **Developers** - Debug applications by examining detailed log files
+- **System Administrators** - Monitor system logs and troubleshoot issues
+- **Data Analysts** - Extract insights from large text-based datasets
 
-### Communication
-- Backend runs as a child process
-- JSON-based command/response protocol
-- Chunks loaded on-demand for memory efficiency
+## Performance Benchmarks
 
-## Performance
+FatFile can handle files that would crash traditional editors:
 
-- **Indexing**: 4M+ lines in < 2 seconds
-- **Memory**: Only loaded chunks are in memory (~100 lines at a time)
-- **Search**: Parallel search across all CPU cores
-- **Scrolling**: Smooth 60fps scrolling with virtual rendering
+- **10 million lines** - Opens instantly, scrolls smoothly
+- **100+ MB files** - No lag, no freeze
+- **Multi-gigabyte logs** - Handles with ease
+- **Search** - Regex search across millions of lines in seconds
+- **Memory Usage** - Stays under 100MB regardless of file size
 
-## Configuration
+## Why "FatFile"?
 
-The extension can be customized by modifying:
-- **Search limit**: Max 1000 results (configurable in backendManager.ts)
-- **Chunk size**: 100 lines per chunk (configurable in LogViewer.tsx)
-- **Regex patterns**: Custom patterns for different log formats
+Because it handles fat files that other viewers can't. Simple as that.
 
-## Troubleshooting
+## Contributing
 
-**Extension doesn't activate:**
-- Ensure the Rust backend is compiled (`cargo build --release`)
-- Check the VS Code Output panel for errors
+Found a bug? Have a feature request? Contributions are welcome! Visit our [GitHub repository](https://github.com/Marabii/FatFile) to:
 
-**Search is slow:**
-- Try a more specific regex pattern
-- Large result sets (>1000) will be truncated
-
-**File not updating:**
-- The backend watches for file changes every 1 second
-- Large truncations trigger a full re-index
+- Report issues
+- Request features
+- Submit pull requests
+- View the source code
 
 ## License
 
-MIT
+FatFile is licensed under the **FatFile Non-Commercial License**.
 
-## Credits
+- **Free for personal and non-commercial use**
+- **Commercial use requires a separate license** - Contact the author for commercial licensing
 
-Built with:
-- Rust for the blazing-fast backend
-- React for the interactive UI
-- TailwindCSS for beautiful styling
-- react-window for virtual scrolling
-- VS Code Extension API
+See the [LICENSE](../LICENSE) file for complete terms and conditions.
+
+Copyright (c) 2026 Hamza DADDA. All rights reserved.
+
+---
+
+**Download FatFile today and never struggle with large log files again.**
+
+Made with performance in mind. Built with Rust. Designed for developers who need to get things done.

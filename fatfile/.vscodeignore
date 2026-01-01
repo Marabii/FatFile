@@ -29,3 +29,7 @@ out/
 # Ensure the bin folder is ALWAYS included
 !bin/
 !bin/*
+
+# Include compiled extension output even though dist/ is gitignored
+!dist/
+!dist/**
