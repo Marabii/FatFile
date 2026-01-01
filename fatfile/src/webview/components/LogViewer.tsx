@@ -367,7 +367,7 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(
               alignItems: "center",
               backgroundColor: isHighlighted
                 ? "var(--vscode-list-activeSelectionBackground)"
-                : hasMatch
+                : hasMatch && !showHeader
                 ? "var(--vscode-editor-findMatchHighlightBackground)"
                 : "transparent",
               fontFamily: "var(--vscode-editor-font-family)",
@@ -443,7 +443,7 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(
                     }}
                     title={column}
                   >
-                    {highlightMatches(column, actualLineIndex, colIndex)}
+                    {showHeader ? column : highlightMatches(column, actualLineIndex, colIndex)}
                   </div>
                 ))
               )}
