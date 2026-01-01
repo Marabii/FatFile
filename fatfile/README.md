@@ -1,6 +1,6 @@
 # FatFile - Lightning-Fast Log Viewer for VSCode
 
-![Basic Functionality](images/Basic_Functionality.gif)
+[![FatFile Demo](https://img.youtube.com/vi/0UAOC2mh1PU/maxresdefault.jpg)](https://www.youtube.com/watch?v=0UAOC2mh1PU)
 
 **Handle massive log files with ease.** FatFile is a high-performance VSCode extension built with a powerful Rust backend that lets you instantly open, search, and navigate log files with **millions of lines** without breaking a sweat.
 
@@ -35,7 +35,7 @@ Using FatFile is incredibly simple:
 
 FatFile automatically detects popular log formats including Apache, Nginx, Common Log Format, and more. Your logs are instantly parsed into clean, readable columns.
 
-![Custom Parser](images/Custom%20Parser.png)
+![Custom Parser](https://github.com/Marabii/FatFile/blob/master/fatfile/images/Custom%20Parser.png?raw=true)
 
 ### Custom Parsing Rules
 
@@ -50,7 +50,7 @@ Need to parse a custom log format? No problem. FatFile lets you define your own 
 
 Search through millions of lines instantly with regex support. Results appear in a dedicated panel below the main viewer, making it easy to jump between matches without losing context.
 
-![Split-Screen Search](images/Split-screen-search.png)
+![Split-Screen Search](https://github.com/Marabii/FatFile/blob/master/fatfile/images/Split-screen-search.png?raw=true)
 
 **Search Features:**
 - Lightning-fast regex search across the entire file
@@ -64,7 +64,7 @@ Search through millions of lines instantly with regex support. Results appear in
 
 Monitor log files in real-time as new lines are written. Perfect for watching application logs, server logs, or any file that's actively being updated.
 
-![Live Tail](images/LiveTail.png)
+![Live Tail](https://github.com/Marabii/FatFile/blob/master/fatfile/images/LiveTail.png?raw=true)
 
 ### Intelligent Navigation
 
