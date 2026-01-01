@@ -1,0 +1,128 @@
+name: Build Platform-Specific Binaries
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          # Linux x64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            rust_target: x86_64-unknown-linux-gnu
+            binary_name: FatFile
+            output_name: FatFile-linux-x64
+
+          # macOS x64 (Intel)
+          - os: macos-13
+            platform: darwin
+            arch: x64
+            rust_target: x86_64-apple-darwin
+            binary_name: FatFile
+            output_name: FatFile-darwin-x64
+
+          # macOS arm64 (Apple Silicon)
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+            rust_target: aarch64-apple-darwin
+            binary_name: FatFile
+            output_name: FatFile-darwin-arm64
+
+          # Windows x64
+          - os: windows-latest
+            platform: win32
+            arch: x64
+            rust_target: x86_64-pc-windows-msvc
+            binary_name: FatFile.exe
+            output_name: FatFile-win32-x64.exe
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            RustBackend/target/
+          key: ${{ runner.os }}-cargo-${{ matrix.rust_target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.rust_target }}-
+            ${{ runner.os }}-cargo-
+
+      - name: Build Rust backend
+        working-directory: RustBackend
+        run: cargo build --release --target ${{ matrix.rust_target }}
+
+      - name: Rename binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p fatfile/bin
+          cp RustBackend/target/${{ matrix.rust_target }}/release/${{ matrix.binary_name }} fatfile/bin/${{ matrix.output_name }}
+          chmod +x fatfile/bin/${{ matrix.output_name }}
+
+      - name: Rename binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          New-Item -ItemType Directory -Force -Path fatfile\bin
+          Copy-Item RustBackend\target\${{ matrix.rust_target }}\release\${{ matrix.binary_name }} fatfile\bin\${{ matrix.output_name }}
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.output_name }}
+          path: fatfile/bin/${{ matrix.output_name }}
+          if-no-files-found: error
+
+  create-release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: binaries
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find binaries -type f -exec cp {} release-assets/ \;
+          ls -la release-assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

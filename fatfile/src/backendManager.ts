@@ -91,7 +91,27 @@ export class BackendManager {
   }
 
   private getBinaryPath(): string | null {
-    // Try multiple locations for the binary (the binary is named after the Cargo package name)
+    const fs = require('fs');
+
+    // Detect platform and architecture
+    const platform = process.platform; // 'linux', 'darwin', 'win32', etc.
+    const arch = process.arch; // 'x64', 'arm64', etc.
+
+    // Construct platform-specific binary name
+    let binaryName: string;
+    if (platform === 'win32') {
+      binaryName = `FatFile-${platform}-${arch}.exe`;
+    } else {
+      binaryName = `FatFile-${platform}-${arch}`;
+    }
+
+    // Check for platform-specific binary in the bin folder
+    const platformBinaryPath = path.join(this.extensionPath, 'bin', binaryName);
+    if (fs.existsSync(platformBinaryPath)) {
+      return platformBinaryPath;
+    }
+
+    // Fallback: Try development build locations
     const possiblePaths = [
       path.join(this.extensionPath, '..', 'RustBackend', 'target', 'release', 'FatFile'),
       path.join(this.extensionPath, '..', 'RustBackend', 'target', 'debug', 'FatFile'),
@@ -99,7 +119,6 @@ export class BackendManager {
       path.join(this.extensionPath, '..', 'target', 'debug', 'FatFile'),
     ];
 
-    const fs = require('fs');
     for (const binaryPath of possiblePaths) {
       if (fs.existsSync(binaryPath)) {
         return binaryPath;
