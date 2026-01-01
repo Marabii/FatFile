@@ -97,13 +97,12 @@ export class BackendManager {
     const platform = process.platform; // 'linux', 'darwin', 'win32', etc.
     const arch = process.arch; // 'x64', 'arm64', etc.
 
+    const isWindows = platform === 'win32';
+
     // Construct platform-specific binary name
-    let binaryName: string;
-    if (platform === 'win32') {
-      binaryName = `FatFile-${platform}-${arch}.exe`;
-    } else {
-      binaryName = `FatFile-${platform}-${arch}`;
-    }
+    const binaryName = isWindows
+      ? `FatFile-${platform}-${arch}.exe`
+      : `FatFile-${platform}-${arch}`;
 
     // Check for platform-specific binary in the bin folder
     const platformBinaryPath = path.join(this.extensionPath, 'bin', binaryName);
@@ -112,11 +111,12 @@ export class BackendManager {
     }
 
     // Fallback: Try development build locations
+    const devBinaryName = isWindows ? 'FatFile.exe' : 'FatFile';
     const possiblePaths = [
-      path.join(this.extensionPath, '..', 'RustBackend', 'target', 'release', 'FatFile'),
-      path.join(this.extensionPath, '..', 'RustBackend', 'target', 'debug', 'FatFile'),
-      path.join(this.extensionPath, '..', 'target', 'release', 'FatFile'),
-      path.join(this.extensionPath, '..', 'target', 'debug', 'FatFile'),
+      path.join(this.extensionPath, '..', 'RustBackend', 'target', 'release', devBinaryName),
+      path.join(this.extensionPath, '..', 'RustBackend', 'target', 'debug', devBinaryName),
+      path.join(this.extensionPath, '..', 'target', 'release', devBinaryName),
+      path.join(this.extensionPath, '..', 'target', 'debug', devBinaryName)
     ];
 
     for (const binaryPath of possiblePaths) {
