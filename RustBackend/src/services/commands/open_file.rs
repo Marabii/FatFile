@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    services::{FileProcessor, FileState, file_processor::FileChangeType, commands::utils},
+    services::{FileProcessor, FileState, commands::utils, file_processor::FileChangeType},
     types::Response,
 };
 
@@ -44,7 +44,7 @@ pub fn open_file(
     let stop_flag = Arc::clone(should_stop);
     *watcher_handle = Some(thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_secs(1));
+            thread::sleep(Duration::from_secs(5));
 
             if stop_flag.load(Ordering::Relaxed) {
                 break; // Exit the loop
@@ -52,7 +52,8 @@ pub fn open_file(
 
             let mut file_state_guard = cloned_file_state.lock().unwrap();
             if let Some(ref mut fp) = *file_state_guard
-                && let Ok(Some((change_type, old_count, new_count, new_lines))) = fp.processor.refresh_if_needed()
+                && let Ok(Some((change_type, old_count, new_count, new_lines))) =
+                    fp.processor.refresh_if_needed()
             {
                 let response = match change_type {
                     FileChangeType::Truncated => Response::FileTruncated {
@@ -76,7 +77,7 @@ pub fn open_file(
                     }
                 };
                 println!("{}", serde_json::to_string(&response).unwrap());
-                      }
+            }
         }
     }));
 

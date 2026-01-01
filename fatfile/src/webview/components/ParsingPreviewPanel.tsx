@@ -195,7 +195,7 @@ export const ParsingPreviewPanel: React.FC<ParsingPreviewPanelProps> = ({
           <VSCodeButton
             appearance="primary"
             onClick={handleApply}
-            disabled={useCustomPattern && (!customPattern || customColumns === 0)}
+            disabled={logFormat === 'Other' && (!customPattern || customColumns === 0)}
           >
             Apply Parsing
           </VSCodeButton>

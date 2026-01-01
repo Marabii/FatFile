@@ -414,7 +414,7 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(
                     }
                   }}
                 >
-                  {highlightMatches(lineData[0] || "", actualLineIndex, 0)}
+                  {lineData[0] || ""}
                 </div>
               ) : (
                 // Parsed line - render columns
@@ -550,11 +550,11 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(
             )}
           </div>
         )}
-        {needsWindowing && (
-          <div
-            className="flex items-center gap-3 px-4 py-2 border-b"
-            style={{ borderColor: "var(--vscode-panel-border)" }}
-          >
+        <div
+          className="flex items-center gap-3 px-4 py-2 border-b"
+          style={{ borderColor: "var(--vscode-panel-border)" }}
+        >
+          {needsWindowing && (
             <div className="flex items-center gap-2">
               <button
                 onClick={handlePreviousWindow}
@@ -589,37 +589,37 @@ export const LogViewer = forwardRef<LogViewerRef, LogViewerProps>(
                 ›
               </button>
             </div>
-            <div className="flex-1" />
-            <form
-              onSubmit={handleGoToLineSubmit}
-              className="flex items-center gap-2"
+          )}
+          <div className="flex-1" />
+          <form
+            onSubmit={handleGoToLineSubmit}
+            className="flex items-center gap-2"
+          >
+            <input
+              type="text"
+              value={goToLineInput}
+              onChange={(e) => setGoToLineInput(e.target.value)}
+              placeholder="Go to line..."
+              className="px-2 py-1 text-xs rounded outline-none"
+              style={{
+                backgroundColor: "var(--vscode-input-background)",
+                color: "var(--vscode-input-foreground)",
+                border: "1px solid var(--vscode-input-border)",
+                width: "120px",
+              }}
+            />
+            <button
+              type="submit"
+              className="px-2 py-1 text-xs rounded"
+              style={{
+                backgroundColor: "var(--vscode-button-background)",
+                color: "var(--vscode-button-foreground)",
+              }}
             >
-              <input
-                type="text"
-                value={goToLineInput}
-                onChange={(e) => setGoToLineInput(e.target.value)}
-                placeholder="Go to line..."
-                className="px-2 py-1 text-xs rounded outline-none"
-                style={{
-                  backgroundColor: "var(--vscode-input-background)",
-                  color: "var(--vscode-input-foreground)",
-                  border: "1px solid var(--vscode-input-border)",
-                  width: "120px",
-                }}
-              />
-              <button
-                type="submit"
-                className="px-2 py-1 text-xs rounded"
-                style={{
-                  backgroundColor: "var(--vscode-button-background)",
-                  color: "var(--vscode-button-foreground)",
-                }}
-              >
-                Go
-              </button>
-            </form>
-          </div>
-        )}
+              Go
+            </button>
+          </form>
+        </div>
         <div className="flex-1 overflow-hidden flex flex-col">
           {/* Column Headers */}
           {nbrColumns && nbrColumns > 0 && columnWidths.length > 0 && (
