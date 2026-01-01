@@ -3,4 +3,3 @@ dist
 out
 *.vsix
 .vscode-test
-bin/FatFile*
